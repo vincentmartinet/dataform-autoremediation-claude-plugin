@@ -1,3 +1,7 @@
+---
+description: Analyze and fix a failing Dataform .sqlx file based on a GCP error log entry. Use when the dataform-scout daemon detects a Dataform compilation or execution error, or when asked to fix a Dataform SQL error.
+---
+
 # Skill: fix-dataform
 
 You have been triggered by the `dataform-scout` daemon because a Dataform compilation or execution error was detected in Google Cloud Logging.
