@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0] - 2026-06-19
+
+### Added
+- `/scout-configure` command and `scout-configure` skill — interactive wizard to set the GCP log scope (project, folder, or organization) stored at `~/.config/dataform-scout/config`.
+- `SessionStart` hook now injects a `systemMessage` on first run (no config file) prompting the user to run `/scout-configure` before the daemon starts.
+- ADR-0003: log scope configuration decision.
+
+### Changed
+- `src/scout_daemon.py` — reads `~/.config/dataform-scout/config` at startup and appends the appropriate `--project` / `--folder` / `--organization` flag to all `gcloud` calls. Falls back to the active gcloud project if config is absent.
+- `src/hooks/session-start.sh` — validates config presence and scope_type before starting daemon; emits actionable `systemMessage` on misconfiguration.
+- `plugin.json` — bumped to `0.3.0`, registered `scout-configure` skill and command.
+
+---
+
 ## [0.2.0] - 2026-06-19
 
 ### Added

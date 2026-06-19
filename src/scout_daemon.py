@@ -16,11 +16,38 @@ from datetime import datetime, timezone, timedelta
 
 GCLOUD = "gcloud"
 PID_FILE = "/tmp/dataform-scout.pid"
+CONFIG_FILE = os.path.expanduser("~/.config/dataform-scout/config")
 LOG_FILTER = 'resource.type="dataform.googleapis.com/Repository" ' "AND severity=ERROR"
 PLUGIN_ROOT = os.environ.get(
     "CLAUDE_PLUGIN_ROOT", os.path.dirname(os.path.dirname(__file__))
 )
 SKILL_PATH = os.path.join(PLUGIN_ROOT, "src", "skills", "fix_dataform.md")
+
+
+def _load_scope_flags() -> list[str]:
+    if not os.path.exists(CONFIG_FILE):
+        return []
+    cfg: dict[str, str] = {}
+    with open(CONFIG_FILE) as f:
+        for line in f:
+            line = line.strip()
+            if "=" in line:
+                k, _, v = line.partition("=")
+                cfg[k.strip()] = v.strip()
+    scope_type = cfg.get("scope_type", "")
+    scope_id = cfg.get("scope_id", "")
+    if not scope_type or not scope_id:
+        return []
+    flag_map = {
+        "project": "--project",
+        "folder": "--folder",
+        "organization": "--organization",
+    }
+    flag = flag_map.get(scope_type)
+    return [flag, scope_id] if flag else []
+
+
+SCOPE_FLAGS = _load_scope_flags()
 
 _tail_proc = None
 
@@ -110,7 +137,7 @@ def _lookback():
     full_filter = f'{LOG_FILTER} AND timestamp>="{since}"'
     print("[scout] Running 24-hour lookback…")
     result = subprocess.run(
-        [GCLOUD, "logging", "read", full_filter, "--format=json"],
+        [GCLOUD, "logging", "read", full_filter, "--format=json"] + SCOPE_FLAGS,
         capture_output=True,
         text=True,
     )
@@ -131,7 +158,7 @@ def _stream():
     global _tail_proc
     print("[scout] Starting real-time log stream (Ctrl-C to stop)…")
     _tail_proc = subprocess.Popen(
-        [GCLOUD, "alpha", "logging", "tail", LOG_FILTER, "--format=json"],
+        [GCLOUD, "alpha", "logging", "tail", LOG_FILTER, "--format=json"] + SCOPE_FLAGS,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
