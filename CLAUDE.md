@@ -47,3 +47,5 @@ You must strictly follow these constraints when writing, modifying, or testing c
 
 ## Workflow Rules
 - After completing a task, always create a git commit with a descriptive message summarizing what changed and why.
+- Update `CHANGELOG.md` with every meaningful change, under the appropriate version using [Keep a Changelog](https://keepachangelog.com) conventions (`Added`, `Changed`, `Fixed`, `Removed`).
+- For significant architectural decisions, create an ADR under `docs/adr/` using the MADR template (`docs/adr/template.md`). Number sequentially (e.g. `0003-title.md`).
