@@ -17,7 +17,7 @@ from datetime import datetime, timezone, timedelta
 GCLOUD = "gcloud"
 PID_FILE = "/tmp/dataform-scout.pid"
 CONFIG_FILE = os.path.expanduser("~/.config/dataform-scout/config")
-LOG_FILTER = 'resource.type="dataform.googleapis.com/Repository" ' "AND severity=ERROR"
+LOG_FILTER = 'resource.type="dataform.googleapis.com/Repository" AND severity=ERROR'
 PLUGIN_ROOT = os.environ.get(
     "CLAUDE_PLUGIN_ROOT", os.path.dirname(os.path.dirname(__file__))
 )
@@ -83,6 +83,21 @@ def _extract_error_details(entry: dict) -> tuple[str | None, str | None]:
     return sqlx_path, error_msg
 
 
+def _notify(title: str, message: str, subtitle: str = "", sound: str = "Basso") -> None:
+    safe_title = title.replace('"', "'")
+    safe_message = message.replace('"', "'")
+    safe_subtitle = subtitle.replace('"', "'")
+    subtitle_clause = f' subtitle "{safe_subtitle}"' if safe_subtitle else ""
+    sound_clause = f' sound name "{sound}"' if sound else ""
+    script = (
+        f'display notification "{safe_message}"'
+        f' with title "{safe_title}"'
+        f"{subtitle_clause}"
+        f"{sound_clause}"
+    )
+    subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True)
+
+
 def _create_fix_branch() -> str:
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     branch = f"fix/dataform-{ts}"
@@ -122,6 +137,11 @@ def _trigger_claude_fix(sqlx_path: str | None, error_msg: str, branch: str):
 def _handle_entry(entry: dict):
     sqlx_path, error_msg = _extract_error_details(entry)
     print(f"[scout] Error detected — file={sqlx_path or '(unknown)'}")
+    _notify(
+        title="Dataform Scout",
+        message=f"Error in {sqlx_path or '(unknown)'}",
+        subtitle="Creating fix branch…",
+    )
     try:
         branch = _create_fix_branch()
         print(f"[scout] Created branch: {branch}")

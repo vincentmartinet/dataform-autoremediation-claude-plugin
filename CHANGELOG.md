@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0] - 2026-06-19
+
+### Added
+- `_notify()` in `src/scout_daemon.py` — fires a macOS system notification bubble (via `/usr/bin/osascript`) when an error log is detected, showing the affected `.sqlx` file and a "Creating fix branch…" subtitle. Notification fires before the git branch step so the user is alerted even if git fails.
+
+---
+
 ## [0.3.0] - 2026-06-19
 
 ### Added
