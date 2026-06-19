@@ -42,3 +42,8 @@ You must strictly follow these constraints when writing, modifying, or testing c
 - Run tests: `pytest`
 - Lint code: `ruff check .`
 - Format code: `ruff format .`
+
+---
+
+## Workflow Rules
+- After completing a task, always create a git commit with a descriptive message summarizing what changed and why.
