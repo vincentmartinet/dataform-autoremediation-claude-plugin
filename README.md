@@ -21,26 +21,30 @@ npm install -g @dataform/cli
 
 ## Installation
 
-```
-/plugin install path/to/dataform-scout
+Clone this repository, then load it as a local plugin:
+
+```sh
+claude --plugin-dir /path/to/dataform-scout
 ```
 
-Or, if published to the Claude Code Marketplace:
+Once published to a marketplace:
 ```
-/plugin install dataform-scout
+/plugin install owner/dataform-scout
 ```
+
+## First-time setup
+
+Before the daemon can watch logs, configure which GCP resource to monitor:
+
+```
+/dataform-scout:scout-configure
+```
+
+This will ask for a project ID, folder ID, or organization ID and write the config to `~/.config/dataform-scout/config`.
 
 ## Usage
 
-Open Claude Code inside your Dataform repository root, then run:
-
-```
-/scout
-```
-
-This will:
-1. Perform a **24-hour lookback** — fetching all `severity=ERROR` logs from your Dataform repositories.
-2. Start a **real-time stream** — tailing new errors as they arrive.
+The scout daemon starts **automatically** when Claude Code launches (via the `SessionStart` hook), as long as a config exists. No manual command needed.
 
 For each error detected, the plugin will:
 - Create a local branch `fix/dataform-<timestamp>`.
