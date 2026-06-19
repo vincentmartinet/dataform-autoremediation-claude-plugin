@@ -1,0 +1,21 @@
+{
+  "name": "dataform-scout",
+  "version": "0.1.0",
+  "description": "Monitor Google Cloud Dataform error logs and auto-fix failing .sqlx files using Claude Code.",
+  "author": "martinet.v@sfeir.com",
+  "skills": [
+    {
+      "name": "fix-dataform",
+      "path": "${CLAUDE_PLUGIN_ROOT}/src/skills/fix_dataform.md",
+      "description": "Analyze and fix a failing Dataform .sqlx file based on a GCP error log entry."
+    }
+  ],
+  "commands": [
+    {
+      "name": "scout",
+      "description": "Run a 24-hour lookback on Dataform error logs then start real-time log streaming.",
+      "script": "${CLAUDE_PLUGIN_ROOT}/src/scout_daemon.py",
+      "shell": "python3"
+    }
+  ]
+}
