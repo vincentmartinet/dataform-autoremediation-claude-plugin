@@ -10,17 +10,28 @@ Configure the Dataform Scout log scope by collecting the resource type and ID fr
 
 If `$ARGUMENTS` contains both a scope type and ID (e.g. `project my-project-id`), use them directly and skip to **Writing the config**.
 
-Otherwise, reply with a single conversational message listing the three options and asking the user to provide both the scope type and its ID in one reply:
+Otherwise, first run:
+
+```sh
+gcloud config get-value project 2>/dev/null
+```
+
+Then reply with a single conversational message listing the options. If the command returned a non-empty project ID, offer it as the default:
 
 > Which GCP resource should Dataform Scout monitor?
 >
-> - **project** `<project-id>` — e.g. `project my-project-id`
+> - **project** `<project-id>` — e.g. `project my-project-id`  
+>   _(or just reply `project` to use your active gcloud project: `<detected-project-id>`)_
 > - **folder** `<folder-id>` — e.g. `folder 123456789`
 > - **organization** `<org-id>` — e.g. `organization 987654321`
 >
 > Reply with the type and ID on one line.
 
+If `gcloud config get-value project` returned nothing, omit the default hint.
+
 Wait for the user's reply before proceeding. Do not use any tool to ask — just output the question as plain text.
+
+If the user replies with just `project` (no ID), use the project ID detected from `gcloud config get-value project`.
 
 ## Writing the config
 
