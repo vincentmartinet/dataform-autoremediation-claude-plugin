@@ -10,6 +10,7 @@
       "description": "Analyze and fix a failing Dataform .sqlx file based on a GCP error log entry."
     }
   ],
+  "hooks": "${CLAUDE_PLUGIN_ROOT}/src/hooks/hooks.json",
   "commands": [
     {
       "name": "scout",

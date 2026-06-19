@@ -1,42 +1,44 @@
-You are a Senior AI Systems Architect specializing in Anthropic's Claude Code CLI and the Claude Code Plugin Marketplace ecosystem. I want to build and package a native Claude Code plugin called "dataform-scout".
+# Dataform Scout — Project Configuration & Guardrails
 
-The purpose of this plugin is to allow developers to monitor Google Cloud Dataform error logs using their active local `gcloud` credentials, automatically branch their local git repository when an error is caught, and instruct Claude Code to fix the failing `.sqlx` code locally.
+## Project Overview
+This project is a native Claude Code Marketplace plugin (`dataform-scout`) that monitors Google Cloud Dataform error logs using local `gcloud` credentials. When an error is caught, it checks out a local git branch and uses headless Claude Code to automatically attempt a code fix.
 
-Please scaffold this project completely following the official Claude Code Marketplace standard structure.
+### Core Tech Stack
+- Python 3.11+ (Log monitoring daemon)
+- Pydantic (Log schema validation)
+- Claude Code Plugin Framework (`plugin.json` + Agent Skills)
+- Google Cloud SDK (`gcloud` CLI)
 
-### 1. Expected Directory Structure:
-Your output must organize the files cleanly:
-├── plugin.json                 # The core manifest file
-├── README.md                   # Installation & usage documentation
-├── CHANGELOG.md                # Version history tracking
-└── src/
-    ├── scout_daemon.py         # The local python log-listener daemon
-    └── skills/
-        └── fix_dataform.md     # The specialized instructions for handling Dataform errors
+---
 
-### 2. Core Components to Implement:
+## Workspace Layout
+- `plugin.json` - Plugin manifest and slash command definition (`/scout`)
+- `src/scout_daemon.py` - Background log listener python script
+- `src/skills/fix_dataform.md` - Specialized agent instructions for Dataform fixes
 
-#### A. The Manifest (`plugin.json`)
-- Define the plugin metadata (`name`, `version`, `description`, `author`).
-- Register a custom slash command: `/scout`
-  - It should trigger the log processing sequence (the 24-hour lookback and starting the daemon).
-- Reference the skill path correctly using the `${CLAUDE_PLUGIN_ROOT}` variable to avoid hardcoded paths.
+---
 
-#### B. The Log Scout Daemon (`src/scout_daemon.py`)
-Write a robust Python script (macOS/Linux compatible) that handles:
-- **Lookback:** Executes `gcloud logging read 'resource.type="dataform.googleapis.com/Repository" AND severity=ERROR AND timestamp>=(-24h)' --format="json"` on invocation.
-- **Streaming:** Hooks into `gcloud alpha logging tail` with the same filter to handle real-time errors while running in the background.
-- **Git Context:** When a log is received, it extracts the target `.sqlx` file path and error message, creates a local git branch named `fix/dataform-[timestamp]`, and triggers an internal Claude Code prompt to evaluate and fix the file using the instructions in `fix_dataform.md`.
-- **Permissions & Safety:** Ensures it relies on the developer's active `gcloud config` environment. It must NEVER push code to a remote repository.
+## Critical Safety & Execution Rules
+You must strictly follow these constraints when writing, modifying, or testing code in this repository:
 
-#### C. The Claude Skill (`src/skills/fix_dataform.md`)
-Create a specialized Markdown file that teaches Claude Code how to react to a Dataform log alert:
-- Instructions to read the failing `.sqlx` file.
-- Instructions to modify the file to resolve the specific BigQuery/Dataform compilation issue.
-- Explicit command to run `dataform compile` locally to verify the fix before asking the user for confirmation.
+### 1. Python Stability & Defensive Coding
+- Use **Pydantic** models (`BaseModel`) to strictly validate incoming GCP log JSON. Never use loose dictionary lookups.
+- Wrap log parsing in `try/except` blocks to prevent the daemon from crashing if GCP updates its schema.
+- Before running the main loop, check the user's `PATH` for `gcloud`, `git`, and `dataform`. Gracefully exit with an error message if any are missing.
 
-#### D. The Documentation (`README.md`)
-- Provide instructions on how developers can install it using `/plugin install`.
-- Explain how to use the `/scout` command and how to verify that `gcloud` and `dataform` CLIs are pre-authenticated on their machine.
+### 2. Circuit Breakers (Anti-Loop Protection)
+- Limit headless fix attempts to a maximum of 3 (`MAX_FIX_ATTEMPTS = 3`).
+- If `dataform compile` still fails after 3 attempts, run `git checkout .` to revert the AI's edits, delete the temporary branch, and notify the user.
+- Enforce a strict 120-second timeout on all headless execution subprocesses.
 
-Please generate all required configuration files and core scripts to initialize this repository for the marketplace.
+### 3. Git Protection
+- Run `git status --porcelain` before checking out a branch. Abort if the working directory is dirty.
+- **Strict Prohibition:** Never write or execute commands that perform `git push`, `git merge`, or any remote-destructive operations. The agent boundary ends at a local branch.
+- Maintain an in-memory cache of recently failed files to ignore duplicate error streams within a 5-minute window.
+
+---
+
+## Development Commands
+- Run tests: `pytest`
+- Lint code: `ruff check .`
+- Format code: `ruff format .`

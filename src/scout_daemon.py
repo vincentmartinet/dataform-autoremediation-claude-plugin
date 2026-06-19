@@ -15,11 +15,11 @@ from datetime import datetime, timezone, timedelta
 
 
 GCLOUD = "gcloud"
-LOG_FILTER = (
-    'resource.type="dataform.googleapis.com/Repository" '
-    'AND severity=ERROR'
+PID_FILE = "/tmp/dataform-scout.pid"
+LOG_FILTER = 'resource.type="dataform.googleapis.com/Repository" ' "AND severity=ERROR"
+PLUGIN_ROOT = os.environ.get(
+    "CLAUDE_PLUGIN_ROOT", os.path.dirname(os.path.dirname(__file__))
 )
-PLUGIN_ROOT = os.environ.get("CLAUDE_PLUGIN_ROOT", os.path.dirname(os.path.dirname(__file__)))
 SKILL_PATH = os.path.join(PLUGIN_ROOT, "src", "skills", "fix_dataform.md")
 
 _tail_proc = None
@@ -28,6 +28,10 @@ _tail_proc = None
 def _graceful_exit(signum, frame):
     if _tail_proc and _tail_proc.poll() is None:
         _tail_proc.terminate()
+    try:
+        os.unlink(PID_FILE)
+    except OSError:
+        pass
     sys.exit(0)
 
 
@@ -40,11 +44,13 @@ def _extract_error_details(entry: dict) -> tuple[str | None, str | None]:
     payload = entry.get("jsonPayload") or {}
     text = entry.get("textPayload", "")
 
-    error_msg = payload.get("message") or payload.get("error") or text or json.dumps(payload)
+    error_msg = (
+        payload.get("message") or payload.get("error") or text or json.dumps(payload)
+    )
 
     # Try to find a .sqlx path anywhere in the serialised entry
     raw = json.dumps(entry)
-    match = re.search(r'[\w./-]+\.sqlx', raw)
+    match = re.search(r"[\w./-]+\.sqlx", raw)
     sqlx_path = match.group(0) if match else None
 
     return sqlx_path, error_msg
@@ -76,7 +82,9 @@ def _trigger_claude_fix(sqlx_path: str | None, error_msg: str, branch: str):
     try:
         subprocess.run(["claude", "-p", prompt], input=prompt, text=True)
     except FileNotFoundError:
-        print("[scout] WARNING: `claude` CLI not found. Prompt written to:", prompt_file)
+        print(
+            "[scout] WARNING: `claude` CLI not found. Prompt written to:", prompt_file
+        )
     finally:
         try:
             os.unlink(prompt_file)
@@ -96,12 +104,15 @@ def _handle_entry(entry: dict):
 
 
 def _lookback():
-    since = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    since = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
     full_filter = f'{LOG_FILTER} AND timestamp>="{since}"'
     print("[scout] Running 24-hour lookback…")
     result = subprocess.run(
         [GCLOUD, "logging", "read", full_filter, "--format=json"],
-        capture_output=True, text=True
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         print(f"[scout] gcloud error: {result.stderr.strip()}", file=sys.stderr)
@@ -121,7 +132,9 @@ def _stream():
     print("[scout] Starting real-time log stream (Ctrl-C to stop)…")
     _tail_proc = subprocess.Popen(
         [GCLOUD, "alpha", "logging", "tail", LOG_FILTER, "--format=json"],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
     )
     buffer = ""
     for line in _tail_proc.stdout:

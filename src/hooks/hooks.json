@@ -1,0 +1,15 @@
+{
+  "description": "Auto-start the scout daemon on session start",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/src/hooks/session-start.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}
