@@ -7,8 +7,8 @@
 - ADR-0004: Fetch Dataform Workflow Invocation Actions for Missing Context.
 
 ### Changed
-- `src/scout_daemon.py` — uses `git worktree` instead of `git checkout -b` to apply automated fixes, isolating Claude's work in a temporary `/tmp` directory so the user's active branch and uncommitted changes are undisturbed.
-- `src/scout_daemon.py` — verifies that the error's `project_id` and `repository_id` match the local Dataform repository (via `workflow_settings.yaml` and `git remote -v`) before creating a fix. Skips logs from unrelated projects.
+- `src/scout_daemon.py` — uses `git clone` instead of `git worktree`/`git checkout` to apply automated fixes. The daemon now queries the Dataform API for the remote URL and clones it into a temporary `/tmp` directory, fully isolating Claude's work from any of the user's local repositories.
+- `src/scout_daemon.py` — removes the local repository matching constraint; the daemon can now autonomously fix errors across any Dataform repository in the Google Cloud project without needing a local clone.
 - `src/scout_daemon.py` — extracts the failing branch (`gitCommitish`) from the Dataform API or workspace instead of blindly branching from the current local branch.
 
 ### Fixed

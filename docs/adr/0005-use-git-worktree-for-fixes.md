@@ -1,7 +1,7 @@
 # ADR-0005: Use Git Worktree and Verify Target Repository For Fixes
 
 ## Status
-Accepted
+Superseded by ADR-0006
 
 ## Context
 When an error log is detected by the daemon, it triggered `git checkout -b fix/dataform-...` directly in the current working directory. This caused multiple problems:

@@ -25,43 +25,86 @@ SKILL_PATH = os.path.join(PLUGIN_ROOT, "skills", "fix-dataform", "SKILL.md")
 
 
 FIXABLE_LLM_CODES = {
-    "invalidQuery", "syntaxError", "unrecognizedName", "unrecognized name",
-    "fieldNotFound", "field not found", "typeMismatch", "type mismatch",
-    "noMatchingSignature", "no matching signature", "invalidArgument",
-    "invalid argument", "invalidFunctionArgument", "invalid function argument",
-    "scalarSubqueryProducedMoreThanOneElement", "scalar subquery produced more than one element",
-    "compilationError", "assertionFailed",
+    "invalidQuery",
+    "syntaxError",
+    "unrecognizedName",
+    "unrecognized name",
+    "fieldNotFound",
+    "field not found",
+    "typeMismatch",
+    "type mismatch",
+    "noMatchingSignature",
+    "no matching signature",
+    "invalidArgument",
+    "invalid argument",
+    "invalidFunctionArgument",
+    "invalid function argument",
+    "scalarSubqueryProducedMoreThanOneElement",
+    "scalar subquery produced more than one element",
+    "compilationError",
+    "assertionFailed",
 }
-INFRA_CODES = {"accessDenied", "quotaExceeded", "rateLimitExceeded", "backendError", "serviceUnavailable", "internalError", "timeout"}
+INFRA_CODES = {
+    "accessDenied",
+    "quotaExceeded",
+    "rateLimitExceeded",
+    "backendError",
+    "serviceUnavailable",
+    "internalError",
+    "timeout",
+}
 DONNEES_CODES = {"invalidValue", "outOfRange", "jobFailed"}
-INFRA_PATTERNS = ["permission denied", "does not have permission", "dataset not found", "project not found", "quota", "credentials", "iam"]
+INFRA_PATTERNS = [
+    "permission denied",
+    "does not have permission",
+    "dataset not found",
+    "project not found",
+    "quota",
+    "credentials",
+    "iam",
+]
 
 
 def detect_error_code(error_msg: str) -> str:
     reason_lower = (error_msg or "").lower()
-    if "syntax error" in reason_lower: return "syntaxError"
-    if "access denied" in reason_lower or "permission denied" in reason_lower or "does not have permission" in reason_lower: return "accessDenied"
-    if "division by zero" in reason_lower: return "jobFailed"
-    if "quota" in reason_lower: return "quotaExceeded"
-    
+    if "syntax error" in reason_lower:
+        return "syntaxError"
+    if (
+        "access denied" in reason_lower
+        or "permission denied" in reason_lower
+        or "does not have permission" in reason_lower
+    ):
+        return "accessDenied"
+    if "division by zero" in reason_lower:
+        return "jobFailed"
+    if "quota" in reason_lower:
+        return "quotaExceeded"
+
     for code in FIXABLE_LLM_CODES:
-        if code.lower() in reason_lower: return code
+        if code.lower() in reason_lower:
+            return code
     for code in INFRA_CODES:
-        if code.lower() in reason_lower: return code
+        if code.lower() in reason_lower:
+            return code
     for code in DONNEES_CODES:
-        if code.lower() in reason_lower: return code
+        if code.lower() in reason_lower:
+            return code
     return "unknown"
 
 
 def classify_error(error_code: str, error_msg: str) -> str:
     code_lower = (error_code or "").lower()
     msg_lower = (error_msg or "").lower()
-    
-    if code_lower in {c.lower() for c in FIXABLE_LLM_CODES}: return "FIXABLE_LLM"
-    if code_lower in {c.lower() for c in INFRA_CODES}: return "INFRA"
-    if code_lower in {c.lower() for c in DONNEES_CODES}: return "DATA"
-    
-    if any(p in msg_lower for p in INFRA_PATTERNS): return "INFRA"
+
+    if code_lower in {c.lower() for c in FIXABLE_LLM_CODES}:
+        return "FIXABLE_LLM"
+    if code_lower in {c.lower() for c in INFRA_CODES}:
+        return "INFRA"
+    if code_lower in {c.lower() for c in DONNEES_CODES}:
+        return "DATA"
+
+    if any(p in msg_lower for p in INFRA_PATTERNS):
+        return "INFRA"
     return "UNKNOWN"
 
 
@@ -146,74 +189,52 @@ def _notify(title: str, message: str, subtitle: str = "", sound: str = "Basso") 
     subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True)
 
 
-def _get_local_project() -> str | None:
+def _get_gcp_repo_url(project_id: str, location: str, repository_id: str) -> str | None:
     try:
-        if os.path.exists("workflow_settings.yaml"):
-            with open("workflow_settings.yaml") as f:
-                content = f.read()
-                match = re.search(r'defaultProject:\s*"?([^"\s\n]+)"?', content)
-                if match:
-                    return match.group(1)
-        elif os.path.exists("dataform.json"):
-            with open("dataform.json") as f:
-                data = json.load(f)
-                return data.get("defaultProject")
+        res = subprocess.run(
+            [
+                GCLOUD,
+                "dataform",
+                "repositories",
+                "describe",
+                repository_id,
+                "--location",
+                location,
+                "--project",
+                project_id,
+                "--format=value(gitRemoteSettings.url)",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            return res.stdout.strip()
     except Exception:
         pass
     return None
 
 
-def _extract_repo_path(url: str) -> str:
-    url = url.replace(".git", "")
-    if "://" in url:
-        return url.split("://")[-1].split("/", 1)[-1]
-    elif ":" in url:
-        return url.split(":")[-1]
-    return url
-
-
-def _is_matching_repository(project_id: str, location: str, repository_id: str) -> bool:
-    if not project_id or not repository_id:
-        return False
-        
-    local_project = _get_local_project()
-    if local_project and local_project != project_id:
-        return False
-        
+def _fetch_workflow_branch(
+    project_id: str, location: str, repository_id: str, invocation_id: str
+) -> str | None:
     try:
-        res = subprocess.run(
-            [GCLOUD, "dataform", "repositories", "describe", repository_id, 
-             "--location", location, "--project", project_id, 
-             "--format=value(gitRemoteSettings.url)"],
-            capture_output=True, text=True
+        token_proc = subprocess.run(
+            [GCLOUD, "auth", "print-access-token"],
+            capture_output=True,
+            text=True,
+            check=True,
         )
-        if res.returncode == 0 and res.stdout.strip():
-            gcp_url = res.stdout.strip()
-            local_remotes = subprocess.run(["git", "remote", "-v"], capture_output=True, text=True).stdout
-            gcp_path = _extract_repo_path(gcp_url)
-            if gcp_path in local_remotes:
-                return True
-            return False
-    except Exception:
-        pass
-        
-    return os.path.basename(os.getcwd()) == repository_id
-
-
-def _fetch_workflow_branch(project_id: str, location: str, repository_id: str, invocation_id: str) -> str | None:
-    try:
-        token_proc = subprocess.run([GCLOUD, "auth", "print-access-token"], capture_output=True, text=True, check=True)
         token = token_proc.stdout.strip()
         url = f"https://dataform.googleapis.com/v1/projects/{project_id}/locations/{location}/repositories/{repository_id}/workflowInvocations/{invocation_id}"
         req = urllib.request.Request(url)
         req.add_header("Authorization", f"Bearer {token}")
         with urllib.request.urlopen(req) as response:
             data = json.loads(response.read().decode("utf-8"))
-            
+
         commitish = data.get("invocationConfig", {}).get("gitCommitish")
         if commitish:
             return commitish
-            
+
         cr_name = data.get("compilationResult")
         if cr_name:
             url_cr = f"https://dataform.googleapis.com/v1/{cr_name}"
@@ -227,24 +248,43 @@ def _fetch_workflow_branch(project_id: str, location: str, repository_id: str, i
     return None
 
 
-def _create_fix_worktree(base_branch: str | None) -> tuple[str, str]:
+def _clone_and_checkout(repo_url: str, branch: str | None) -> tuple[str, str]:
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    clone_path = f"/tmp/dataform-scout-{ts}"
     fix_branch = f"fix/dataform-{ts}"
-    wt_path = f"/tmp/dataform-scout-{ts}"
-    
-    if base_branch:
-        subprocess.run(["git", "fetch", "origin", base_branch], capture_output=True)
+
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    subprocess.run(
+        ["git", "clone", repo_url, clone_path], check=True, capture_output=True, env=env
+    )
+
+    if branch:
         try:
-            subprocess.run(["git", "worktree", "add", "-b", fix_branch, wt_path, base_branch], check=True, capture_output=True)
-            return fix_branch, wt_path
+            subprocess.run(
+                ["git", "checkout", branch],
+                cwd=clone_path,
+                check=True,
+                capture_output=True,
+            )
         except subprocess.CalledProcessError:
             pass
 
-    subprocess.run(["git", "worktree", "add", "-b", fix_branch, wt_path], check=True, capture_output=True)
-    return fix_branch, wt_path
+    subprocess.run(
+        ["git", "checkout", "-b", fix_branch],
+        cwd=clone_path,
+        check=True,
+        capture_output=True,
+    )
+    return fix_branch, clone_path
 
 
-def _trigger_claude_fix(action_name: str | None, sqlx_path: str | None, error_msg: str, branch: str, wt_path: str):
+def _trigger_claude_fix(
+    action_name: str | None,
+    sqlx_path: str | None,
+    error_msg: str,
+    branch: str,
+    wt_path: str,
+):
     try:
         with open(SKILL_PATH) as f:
             system_prompt = f.read()
@@ -278,16 +318,23 @@ def _trigger_claude_fix(action_name: str | None, sqlx_path: str | None, error_ms
         )
 
 
-def _fetch_workflow_failed_actions(project_id: str, location: str, repository_id: str, invocation_id: str) -> list[dict]:
+def _fetch_workflow_failed_actions(
+    project_id: str, location: str, repository_id: str, invocation_id: str
+) -> list[dict]:
     try:
-        token_proc = subprocess.run([GCLOUD, "auth", "print-access-token"], capture_output=True, text=True, check=True)
+        token_proc = subprocess.run(
+            [GCLOUD, "auth", "print-access-token"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
         token = token_proc.stdout.strip()
         url = f"https://dataform.googleapis.com/v1/projects/{project_id}/locations/{location}/repositories/{repository_id}/workflowInvocations/{invocation_id}:query"
         req = urllib.request.Request(url)
         req.add_header("Authorization", f"Bearer {token}")
         with urllib.request.urlopen(req) as response:
             data = json.loads(response.read().decode("utf-8"))
-        
+
         failed = []
         for action in data.get("workflowInvocationActions", []):
             if action.get("state") == "FAILED":
@@ -298,17 +345,30 @@ def _fetch_workflow_failed_actions(project_id: str, location: str, repository_id
         return []
 
 
-def _process_error_context(action_name: str | None, sqlx_path: str | None, error_msg: str, project_id: str, location: str, repository_id: str, branch: str | None):
-    if not _is_matching_repository(project_id, location, repository_id):
-        print(f"[scout] Skipping error from {project_id}/{repository_id} - does not match local repository.")
+def _process_error_context(
+    action_name: str | None,
+    sqlx_path: str | None,
+    error_msg: str,
+    project_id: str,
+    location: str,
+    repository_id: str,
+    branch: str | None,
+):
+    repo_url = _get_gcp_repo_url(project_id, location, repository_id)
+    if not repo_url:
+        print(
+            f"[scout] Could not deduce Git remote URL for {project_id}/{repository_id}. Skipping."
+        )
         return
 
     error_code = detect_error_code(error_msg)
     category = classify_error(error_code, error_msg)
-    
+
     target_display = action_name or sqlx_path or "(unknown)"
-    print(f"[scout] Error detected — target={target_display}, code={error_code}, category={category}")
-    
+    print(
+        f"[scout] Error detected — target={target_display}, code={error_code}, category={category}"
+    )
+
     if category in ("INFRA", "DATA", "UNKNOWN"):
         print(f"[scout] Skipping non-fixable error: {category}")
         _notify(
@@ -321,12 +381,12 @@ def _process_error_context(action_name: str | None, sqlx_path: str | None, error
     _notify(
         title="Dataform Scout",
         message=f"Error in {target_display}",
-        subtitle="Creating fix worktree…",
+        subtitle="Cloning repository for fix…",
     )
     try:
-        fix_branch, wt_path = _create_fix_worktree(branch)
-        print(f"[scout] Created worktree at {wt_path} on branch {fix_branch}")
-        _trigger_claude_fix(action_name, sqlx_path, error_msg, fix_branch, wt_path)
+        fix_branch, clone_path = _clone_and_checkout(repo_url, branch)
+        print(f"[scout] Cloned to {clone_path} on branch {fix_branch}")
+        _trigger_claude_fix(action_name, sqlx_path, error_msg, fix_branch, clone_path)
     except subprocess.CalledProcessError as exc:
         print(f"[scout] git error: {exc}", file=sys.stderr)
 
@@ -334,33 +394,58 @@ def _process_error_context(action_name: str | None, sqlx_path: str | None, error
 def _handle_entry(entry: dict):
     payload = entry.get("jsonPayload") or entry.get("protoPayload") or {}
     type_str = payload.get("@type", "")
-    
+
     resource_labels = entry.get("resource", {}).get("labels", {})
     location = resource_labels.get("location", "")
     repository_id = resource_labels.get("repository_id", "")
-    
+
     log_name = entry.get("logName", "")
     project_id = log_name.split("/")[1] if log_name.startswith("projects/") else ""
-    
+
     labels = entry.get("labels", {})
     workspace_id = labels.get("workspace_id")
-    
-    if type_str == "type.googleapis.com/google.cloud.dataform.logging.v1.WorkflowInvocationCompletionLogEntry":
+
+    if (
+        type_str
+        == "type.googleapis.com/google.cloud.dataform.logging.v1.WorkflowInvocationCompletionLogEntry"
+    ):
         if payload.get("terminalState") == "FAILED":
             invocation_id = payload.get("workflowInvocationId")
-            
+
             if invocation_id and location and repository_id and project_id:
-                print(f"[scout] Fetching failed actions for invocation {invocation_id}...")
-                failed_actions = _fetch_workflow_failed_actions(project_id, location, repository_id, invocation_id)
-                branch = _fetch_workflow_branch(project_id, location, repository_id, invocation_id)
+                print(
+                    f"[scout] Fetching failed actions for invocation {invocation_id}..."
+                )
+                failed_actions = _fetch_workflow_failed_actions(
+                    project_id, location, repository_id, invocation_id
+                )
+                branch = _fetch_workflow_branch(
+                    project_id, location, repository_id, invocation_id
+                )
                 for action in failed_actions:
                     action_name = action.get("target", {}).get("name")
                     error_msg = action.get("failureReason", "")
-                    _process_error_context(action_name, None, error_msg, project_id, location, repository_id, branch)
+                    _process_error_context(
+                        action_name,
+                        None,
+                        error_msg,
+                        project_id,
+                        location,
+                        repository_id,
+                        branch,
+                    )
                 return
 
     action_name, sqlx_path, error_msg = _extract_error_details(entry)
-    _process_error_context(action_name, sqlx_path, error_msg, project_id, location, repository_id, workspace_id)
+    _process_error_context(
+        action_name,
+        sqlx_path,
+        error_msg,
+        project_id,
+        location,
+        repository_id,
+        workspace_id,
+    )
 
 
 def _lookback():
