@@ -1,4 +1,4 @@
-FIXABLE_LLM_CODES = {
+FIXABLE_LLM_CODES: set[str] = {
     "invalidQuery",
     "syntaxError",
     "unrecognizedName",
@@ -19,7 +19,7 @@ FIXABLE_LLM_CODES = {
     "assertionFailed",
 }
 
-INFRA_CODES = {
+INFRA_CODES: set[str] = {
     "accessDenied",
     "quotaExceeded",
     "rateLimitExceeded",
@@ -29,9 +29,9 @@ INFRA_CODES = {
     "timeout",
 }
 
-DONNEES_CODES = {"invalidValue", "outOfRange", "jobFailed"}
+DONNEES_CODES: set[str] = {"invalidValue", "outOfRange", "jobFailed"}
 
-INFRA_PATTERNS = [
+INFRA_PATTERNS: list[str] = [
     "permission denied",
     "does not have permission",
     "dataset not found",
@@ -42,7 +42,7 @@ INFRA_PATTERNS = [
 ]
 
 
-def detect_error_code(error_msg: str) -> str:
+def detect_error_code(error_msg: str) -> str:  # noqa: C901
     reason_lower = (error_msg or "").lower()
     if "syntax error" in reason_lower:
         return "syntaxError"

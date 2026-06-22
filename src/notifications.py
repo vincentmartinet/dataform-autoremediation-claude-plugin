@@ -1,4 +1,7 @@
+import logging
 import subprocess
+
+logger = logging.getLogger(__name__)
 
 
 def notify(title: str, message: str, subtitle: str = "", sound: str = "Basso") -> None:
@@ -13,4 +16,13 @@ def notify(title: str, message: str, subtitle: str = "", sound: str = "Basso") -
         f"{subtitle_clause}"
         f"{sound_clause}"
     )
-    subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True)
+    try:
+        subprocess.run(
+            ["/usr/bin/osascript", "-e", script], capture_output=True, check=True
+        )
+    except subprocess.CalledProcessError as exc:
+        logger.warning(
+            f"Failed to send OS notification: {exc.stderr.decode('utf-8', errors='ignore')}"  # noqa: E501
+        )
+    except Exception as exc:
+        logger.warning(f"Unexpected error while sending OS notification: {exc}")

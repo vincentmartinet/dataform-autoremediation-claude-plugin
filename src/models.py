@@ -1,23 +1,120 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any
+
+
+@dataclass
+class ActionTarget:
+    name: str = ""
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ActionTarget":
+        if not isinstance(data, dict):
+            return cls()
+        return cls(name=data.get("name", ""))
+
+
+@dataclass
+class Payload:
+    message: str = ""
+    error: str = ""
+    type_str: str = ""
+    terminal_state: str = ""
+    workflow_invocation_id: str = ""
+    action_target: ActionTarget | None = None
+    raw_data: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "Payload":
+        if not data or not isinstance(data, dict):
+            return cls()
+
+        target_data = data.get("actionTarget")
+        target = ActionTarget.from_dict(target_data) if target_data else None
+
+        return cls(
+            message=data.get("message", ""),
+            error=data.get("error", ""),
+            type_str=data.get("@type", ""),
+            terminal_state=data.get("terminalState", ""),
+            workflow_invocation_id=data.get("workflowInvocationId", ""),
+            action_target=target,
+            raw_data=data,
+        )
+
+
+@dataclass
+class ResourceLabels:
+    location: str = ""
+    repository_id: str = ""
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ResourceLabels":
+        if not isinstance(data, dict):
+            return cls()
+        return cls(
+            location=data.get("location", ""),
+            repository_id=data.get("repository_id", ""),
+        )
+
+
+@dataclass
+class Resource:
+    labels: ResourceLabels = field(default_factory=ResourceLabels)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Resource":
+        if not isinstance(data, dict):
+            return cls()
+        return cls(labels=ResourceLabels.from_dict(data.get("labels", {})))
+
+
+@dataclass
+class LogEntryLabels:
+    action_name: str = ""
+    workspace_id: str = ""
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "LogEntryLabels":
+        if not isinstance(data, dict):
+            return cls()
+        return cls(
+            action_name=data.get("action_name", ""),
+            workspace_id=data.get("workspace_id", ""),
+        )
 
 
 @dataclass
 class LogEntry:
-    jsonPayload: Optional[Dict[str, Any]] = None
-    protoPayload: Optional[Dict[str, Any]] = None
-    textPayload: str = ""
-    labels: Dict[str, str] = field(default_factory=dict)
-    resource: Dict[str, Any] = field(default_factory=dict)
-    logName: str = ""
+    text_payload: str = ""
+    payload: Payload = field(default_factory=Payload)
+    labels: LogEntryLabels = field(default_factory=LogEntryLabels)
+    resource: Resource = field(default_factory=Resource)
+    log_name: str = ""
 
     @classmethod
-    def from_dict(cls, data: dict) -> "LogEntry":
-        return cls(
-            jsonPayload=data.get("jsonPayload"),
-            protoPayload=data.get("protoPayload"),
-            textPayload=data.get("textPayload", ""),
-            labels=data.get("labels", {}),
-            resource=data.get("resource", {}),
-            logName=data.get("logName", ""),
+    def from_dict(cls, data: dict[str, Any]) -> "LogEntry":
+        raw_json = data.get("jsonPayload")
+        raw_proto = data.get("protoPayload")
+
+        # Use jsonPayload if available, else protoPayload, else empty
+        payload_data = (
+            raw_json
+            if isinstance(raw_json, dict)
+            else (raw_proto if isinstance(raw_proto, dict) else {})
         )
+
+        return cls(
+            text_payload=data.get("textPayload", ""),
+            payload=Payload.from_dict(payload_data),
+            labels=LogEntryLabels.from_dict(data.get("labels", {})),
+            resource=Resource.from_dict(data.get("resource", {})),
+            log_name=data.get("logName", ""),
+        )
+
+    @property
+    def project_id(self) -> str:
+        if self.log_name.startswith("projects/"):
+            parts = self.log_name.split("/")
+            if len(parts) >= 2:
+                return parts[1]
+        return ""

@@ -1,7 +1,10 @@
-import sys
+import logging
 import subprocess
-from constants import SKILL_PATH, MAX_FIX_ATTEMPTS
-from notifications import notify
+
+from src.constants import MAX_FIX_ATTEMPTS, SKILL_PATH
+from src.notifications import notify
+
+logger = logging.getLogger(__name__)
 
 
 def trigger_claude_fix(
@@ -10,12 +13,12 @@ def trigger_claude_fix(
     error_msg: str,
     branch: str,
     wt_path: str,
-):
+) -> None:
     try:
         with open(SKILL_PATH) as f:
             system_prompt = f.read()
     except OSError as exc:
-        print(f"[scout] Cannot read skill file {SKILL_PATH}: {exc}", file=sys.stderr)
+        logger.error(f"Cannot read skill file {SKILL_PATH}: {exc}")
         return
 
     prompt_lines = [
@@ -30,7 +33,7 @@ def trigger_claude_fix(
     prompt = "\n".join(prompt_lines)
 
     for attempt in range(1, MAX_FIX_ATTEMPTS + 1):
-        print(f"[scout] Claude fix attempt {attempt}/{MAX_FIX_ATTEMPTS}...")
+        logger.info(f"Claude fix attempt {attempt}/{MAX_FIX_ATTEMPTS}...")
         try:
             subprocess.run(
                 [
@@ -51,7 +54,7 @@ def trigger_claude_fix(
                 ["dataform", "compile"], cwd=wt_path, capture_output=True, text=True
             )
             if compile_res.returncode == 0:
-                print(f"[scout] Fix successful on attempt {attempt}.")
+                logger.info(f"Fix successful on attempt {attempt}.")
                 notify(
                     "Dataform Scout",
                     "Fix successful!",
@@ -59,21 +62,24 @@ def trigger_claude_fix(
                 )
                 return
             else:
-                prompt = f"The previous fix did not resolve the error. Dataform compile output:\n{compile_res.stderr}\nPlease try again."
+                prompt = (
+                    "The previous fix did not resolve the error. Dataform compile output:\n"  # noqa: E501
+                    f"{compile_res.stderr}\nPlease try again."
+                )
         except FileNotFoundError:
-            print("[scout] WARNING: `claude` CLI not found.", file=sys.stderr)
+            logger.warning("`claude` CLI not found.")
             return
         except subprocess.TimeoutExpired:
-            print(
-                f"[scout] WARNING: claude fix attempt {attempt} timed out after 120s.",
-                file=sys.stderr,
+            logger.warning(f"claude fix attempt {attempt} timed out after 120s.")
+            prompt = (
+                "The previous fix attempt timed out. "
+                "Please be more concise and try again."
             )
-            prompt = "The previous fix attempt timed out. Please be more concise and try again."
 
-    print(f"[scout] Failed to fix after {MAX_FIX_ATTEMPTS} attempts. Reverting.")
-    subprocess.run(["git", "checkout", "."], cwd=wt_path)
-    subprocess.run(["git", "checkout", "-"], cwd=wt_path)
-    subprocess.run(["git", "branch", "-D", branch], cwd=wt_path)
+    logger.error(f"Failed to fix after {MAX_FIX_ATTEMPTS} attempts. Reverting.")
+    subprocess.run(["git", "checkout", "."], cwd=wt_path, capture_output=True)
+    subprocess.run(["git", "checkout", "-"], cwd=wt_path, capture_output=True)
+    subprocess.run(["git", "branch", "-D", branch], cwd=wt_path, capture_output=True)
     notify(
         "Dataform Scout",
         "Auto-fix failed",

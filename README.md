@@ -11,17 +11,14 @@ A Claude Code plugin that monitors Google Cloud Dataform error logs. When an err
 | `dataform` CLI | `dataform --version` |
 | `claude` CLI | `claude --version` |
 | `git` CLI | `git --version` |
-| `gh` CLI | `gh --version` |
+| `uv` | `uv --version` (for development) |
 | Active gcloud auth | `gcloud auth list` (at least one `*` account) |
-| Active gh auth | `gh auth status` |
 | Correct project set | `gcloud config list project` |
 
 Install missing components:
 ```sh
 gcloud components install alpha
 npm install -g @dataform/cli
-brew install gh # (On macOS)
-gh auth login
 ```
 
 ## Installation
@@ -79,5 +76,24 @@ gcloud logging read 'resource.type="dataform.googleapis.com/Repository" AND seve
 
 - **`gcloud alpha logging tail` not found** — install the alpha component: `gcloud components install alpha`.
 - **No logs returned** — confirm your active project has Dataform repositories and that Cloud Logging is enabled.
-- **`claude` or `gh` not found** — ensure both the Claude Code CLI and GitHub CLI are installed and on your `PATH`.
-- **Repository clone fails** — ensure you are authenticated with GitHub CLI via `gh auth login` and have access to the Dataform repository.
+- **`claude` or `git` not found** — ensure both the Claude Code CLI and Git CLI are installed and on your `PATH`.
+
+## Development
+
+This project uses `uv` for dependency management and testing.
+```sh
+# Setup environment and install dev dependencies
+uv sync
+
+# Format code
+uv run ruff format .
+
+# Lint code
+uv run ruff check .
+
+# Type checking
+uv run mypy src/ tests/
+
+# Run tests
+uv run pytest --cov=src
+```

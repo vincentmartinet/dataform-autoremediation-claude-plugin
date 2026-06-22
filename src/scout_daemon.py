@@ -4,28 +4,47 @@ Dataform Scout Daemon — monitors GCP Dataform error logs and triggers Claude C
 Relies entirely on the active `gcloud` configuration. Never pushes to remote.
 """
 
+import contextlib
 import json
+import logging
 import os
 import re
 import shutil
 import signal
 import subprocess
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from constants import CONFIG_FILE, GCLOUD, LOG_FILTER, PID_FILE
-from models import LogEntry
-from error_classification import detect_error_code, classify_error
-from gcp_api import (
-    get_gcp_repo_url,
+from src.claude_invoker import trigger_claude_fix
+from src.constants import CONFIG_FILE, GCLOUD, LOG_FILTER, PID_FILE
+from src.error_classification import classify_error, detect_error_code
+from src.exceptions import GitOpsError, MissingDependencyError
+from src.gcp_api import (
     fetch_workflow_branch,
     fetch_workflow_failed_actions,
+    get_gcp_repo_url,
 )
-from git_ops import clone_and_checkout
-from claude_invoker import trigger_claude_fix
-from notifications import notify
+from src.git_ops import clone_and_checkout
+from src.models import LogEntry
+from src.notifications import notify
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("scout_daemon")
 
 _recent_failures: dict[str, datetime] = {}
+
+
+def _clean_cache() -> None:
+    global _recent_failures
+    now = datetime.now()
+    _recent_failures = {
+        k: v for k, v in _recent_failures.items() if (now - v).total_seconds() < 300
+    }
 
 
 def _load_scope_flags() -> list[str]:
@@ -52,16 +71,15 @@ def _load_scope_flags() -> list[str]:
 
 
 SCOPE_FLAGS = _load_scope_flags()
-_tail_proc = None
+_tail_proc: subprocess.Popen[str] | None = None
 
 
-def _graceful_exit(signum, frame):
+def _graceful_exit(signum: Any, frame: Any) -> None:
+    logger.info("Shutting down daemon...")
     if _tail_proc and _tail_proc.poll() is None:
         _tail_proc.terminate()
-    try:
+    with contextlib.suppress(OSError):
         os.unlink(PID_FILE)
-    except OSError:
-        pass
     sys.exit(0)
 
 
@@ -70,23 +88,20 @@ signal.signal(signal.SIGTERM, _graceful_exit)
 
 
 def _extract_error_details(
-    entry: LogEntry, raw_entry: dict
-) -> tuple[str | None, str | None, str | None]:
+    entry: LogEntry, raw_entry: dict[str, Any]
+) -> tuple[str | None, str | None, str]:
     """Return (action_name, sqlx_file_path, error_message) from a log entry."""
-    payload = entry.jsonPayload or entry.protoPayload or {}
-    text = entry.textPayload
+    payload = entry.payload
+    text = entry.text_payload
 
-    error_msg = (
-        payload.get("message") or payload.get("error") or text or json.dumps(payload)
-    )
+    error_msg = payload.message or payload.error or text or json.dumps(payload.raw_data)
 
     action_name = None
-    if "action_name" in entry.labels:
-        action_name = entry.labels["action_name"]
-    elif "actionTarget" in payload and isinstance(payload["actionTarget"], dict):
-        action_name = payload["actionTarget"].get("name")
+    if entry.labels.action_name:
+        action_name = entry.labels.action_name
+    elif payload.action_target and payload.action_target.name:
+        action_name = payload.action_target.name
 
-    # Try to find a .sqlx path anywhere in the serialised entry
     raw = json.dumps(raw_entry)
     match = re.search(r"[\w./-]+\.sqlx", raw)
     sqlx_path = match.group(0) if match else None
@@ -102,11 +117,12 @@ def _process_error_context(
     location: str,
     repository_id: str,
     branch: str | None,
-):
+) -> None:
     repo_url = get_gcp_repo_url(project_id, location, repository_id)
     if not repo_url:
-        print(
-            f"[scout] Could not deduce Git remote URL for {project_id}/{repository_id}. Skipping."
+        logger.warning(
+            f"Could not deduce Git remote URL for {project_id}/{repository_id}. "
+            "Skipping."
         )
         return
 
@@ -114,12 +130,13 @@ def _process_error_context(
     category = classify_error(error_code, error_msg)
 
     target_display = action_name or sqlx_path or "(unknown)"
-    print(
-        f"[scout] Error detected — target={target_display}, code={error_code}, category={category}"
+    logger.info(
+        f"Error detected — target={target_display}, code={error_code}, "
+        f"category={category}"
     )
 
     if category in ("INFRA", "DATA", "UNKNOWN"):
-        print(f"[scout] Skipping non-fixable error: {category}")
+        logger.info(f"Skipping non-fixable error: {category}")
         notify(
             title="Dataform Scout",
             message=f"Skipped {category} error in {target_display}",
@@ -134,77 +151,72 @@ def _process_error_context(
     )
     try:
         fix_branch, clone_path = clone_and_checkout(repo_url, branch)
-        print(f"[scout] Cloned to {clone_path} on branch {fix_branch}")
+        logger.info(f"Cloned to {clone_path} on branch {fix_branch}")
         trigger_claude_fix(action_name, sqlx_path, error_msg, fix_branch, clone_path)
-    except subprocess.CalledProcessError as exc:
-        print(f"[scout] git error: {exc}", file=sys.stderr)
+    except GitOpsError as exc:
+        logger.error(f"Git operation failed: {exc}")
 
 
-def _handle_entry(raw_entry: dict):
+def _handle_entry(raw_entry: dict[str, Any]) -> None:
     global _recent_failures
+    _clean_cache()
+
     try:
         entry = LogEntry.from_dict(raw_entry)
-        payload = entry.jsonPayload or entry.protoPayload or {}
-        type_str = payload.get("@type", "")
+        type_str = entry.payload.type_str
 
-        location = entry.resource.get("labels", {}).get("location", "")
-        repository_id = entry.resource.get("labels", {}).get("repository_id", "")
+        location = entry.resource.labels.location
+        repository_id = entry.resource.labels.repository_id
+        project_id = entry.project_id
+        workspace_id = entry.labels.workspace_id
 
-        project_id = (
-            entry.logName.split("/")[1] if entry.logName.startswith("projects/") else ""
+        is_workflow = (
+            type_str == "type.googleapis.com/google.cloud.dataform.logging.v1."
+            "WorkflowInvocationCompletionLogEntry"
         )
-        workspace_id = entry.labels.get("workspace_id")
+        if is_workflow and entry.payload.terminal_state == "FAILED":
+            invocation_id = entry.payload.workflow_invocation_id
 
-        if (
-            type_str
-            == "type.googleapis.com/google.cloud.dataform.logging.v1.WorkflowInvocationCompletionLogEntry"
-        ):
-            if payload.get("terminalState") == "FAILED":
-                invocation_id = payload.get("workflowInvocationId")
+            if invocation_id and location and repository_id and project_id:
+                logger.info(
+                    f"Fetching failed actions for invocation {invocation_id}..."
+                )
+                failed_actions = fetch_workflow_failed_actions(
+                    project_id, location, repository_id, invocation_id
+                )
+                branch = fetch_workflow_branch(
+                    project_id, location, repository_id, invocation_id
+                )
+                for action in failed_actions:
+                    target = action.get("target", {})
+                    if isinstance(target, dict):
+                        action_name = target.get("name", "")
+                    else:
+                        action_name = ""
+                    error_msg = str(action.get("failureReason", ""))
 
-                if invocation_id and location and repository_id and project_id:
-                    print(
-                        f"[scout] Fetching failed actions for invocation {invocation_id}..."
+                    cache_key = f"{project_id}:{repository_id}:{action_name}"
+                    now = datetime.now()
+                    if cache_key in _recent_failures:
+                        continue
+                    _recent_failures[cache_key] = now
+
+                    _process_error_context(
+                        action_name,
+                        None,
+                        error_msg,
+                        project_id,
+                        location,
+                        repository_id,
+                        branch,
                     )
-                    failed_actions = fetch_workflow_failed_actions(
-                        project_id, location, repository_id, invocation_id
-                    )
-                    branch = fetch_workflow_branch(
-                        project_id, location, repository_id, invocation_id
-                    )
-                    for action in failed_actions:
-                        action_name = action.get("target", {}).get("name")
-                        error_msg = action.get("failureReason", "")
-
-                        cache_key = f"{project_id}:{repository_id}:{action_name}"
-                        now = datetime.now()
-                        if (
-                            cache_key in _recent_failures
-                            and (now - _recent_failures[cache_key]).total_seconds()
-                            < 300
-                        ):
-                            continue
-                        _recent_failures[cache_key] = now
-
-                        _process_error_context(
-                            action_name,
-                            None,
-                            error_msg,
-                            project_id,
-                            location,
-                            repository_id,
-                            branch,
-                        )
-                    return
+                return
 
         action_name, sqlx_path, error_msg = _extract_error_details(entry, raw_entry)
 
         cache_key = f"{project_id}:{repository_id}:{sqlx_path or action_name}"
         now = datetime.now()
-        if (
-            cache_key in _recent_failures
-            and (now - _recent_failures[cache_key]).total_seconds() < 300
-        ):
+        if cache_key in _recent_failures:
             return
         _recent_failures[cache_key] = now
 
@@ -218,67 +230,83 @@ def _handle_entry(raw_entry: dict):
             workspace_id,
         )
     except Exception as e:
-        print(f"[scout] Error handling entry: {e}", file=sys.stderr)
+        logger.error(f"Error handling entry: {e}", exc_info=True)
 
 
-def _lookback():
-    since = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
+def _lookback() -> None:
+    since = (datetime.now(UTC) - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
     full_filter = f'{LOG_FILTER} AND timestamp>="{since}"'
-    print("[scout] Running 24-hour lookback…")
-    result = subprocess.run(
-        [GCLOUD, "logging", "read", full_filter, "--format=json"] + SCOPE_FLAGS,
-        capture_output=True,
-        text=True,
-    )
+    logger.info("Running 24-hour lookback…")
+
+    cmd = [GCLOUD, "logging", "read", full_filter, "--format=json"] + SCOPE_FLAGS
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
     if result.returncode != 0:
-        print(f"[scout] gcloud error: {result.stderr.strip()}", file=sys.stderr)
+        logger.error(f"gcloud lookback error: {result.stderr.strip()}")
         return
+
     try:
         entries = json.loads(result.stdout or "[]")
     except json.JSONDecodeError:
-        print("[scout] Failed to parse lookback output.", file=sys.stderr)
+        logger.error("Failed to parse lookback output.")
         return
-    print(f"[scout] Found {len(entries)} error(s) in the last 24 hours.")
+
+    logger.info(f"Found {len(entries)} error(s) in the last 24 hours.")
     for entry in entries:
-        _handle_entry(entry)
+        if isinstance(entry, dict):
+            _handle_entry(entry)
 
 
-def _stream():
+def _stream() -> None:
     global _tail_proc
-    print("[scout] Starting real-time log stream (Ctrl-C to stop)…")
+    logger.info("Starting real-time log stream (Ctrl-C to stop)…")
+
+    cmd = [
+        GCLOUD,
+        "alpha",
+        "logging",
+        "tail",
+        LOG_FILTER,
+        "--format=json",
+    ] + SCOPE_FLAGS
     _tail_proc = subprocess.Popen(
-        [GCLOUD, "alpha", "logging", "tail", LOG_FILTER, "--format=json"] + SCOPE_FLAGS,
+        cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
+
     buffer = ""
+    if _tail_proc.stdout is None:
+        return
+
     for line in _tail_proc.stdout:
         buffer += line
         try:
             entry = json.loads(buffer)
             buffer = ""
-            _handle_entry(entry)
+            if isinstance(entry, dict):
+                _handle_entry(entry)
         except json.JSONDecodeError:
-            pass  # accumulate multi-line JSON
+            pass
 
 
-def check_dependencies():
+def check_dependencies() -> None:
     missing = []
-    for cmd in ["gcloud", "git", "dataform", "gh"]:
+    # Removed 'gh' per user rules (should only check gcloud, git, dataform)
+    for cmd in ["gcloud", "git", "dataform"]:
         if shutil.which(cmd) is None:
             missing.append(cmd)
     if missing:
-        print(
-            f"[scout] Error: Missing required executables in PATH: {', '.join(missing)}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        msg = f"Missing required executables in PATH: {', '.join(missing)}"
+        logger.error(msg)
+        raise MissingDependencyError(msg)
 
 
 if __name__ == "__main__":
-    check_dependencies()
-    _lookback()
-    _stream()
+    try:
+        check_dependencies()
+        _lookback()
+        _stream()
+    except MissingDependencyError:
+        sys.exit(1)
