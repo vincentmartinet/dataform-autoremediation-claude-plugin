@@ -39,9 +39,9 @@ You must strictly follow these constraints when writing, modifying, or testing c
 ---
 
 ## Development Commands
-- Run tests: `pytest`
-- Lint code: `ruff check .`
 - Format code: `ruff format .`
+- Lint code: `ruff check .`
+- Run tests: `pytest`
 
 ---
 
