@@ -1,7 +1,17 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from src.models import LogEntry
-from src.scout_daemon import _extract_error_details, _handle_entry
+from src.scout_daemon import ScoutDaemon
+
+
+def get_mocked_daemon() -> ScoutDaemon:
+    return ScoutDaemon(
+        gcp_client=MagicMock(),
+        git_ops=MagicMock(),
+        invoker=MagicMock(),
+        notification_service=MagicMock(),
+        error_classifier=MagicMock(),
+    )
 
 
 def test_extract_error_details() -> None:
@@ -14,21 +24,21 @@ def test_extract_error_details() -> None:
     }
     entry = LogEntry.from_dict(raw_entry)
 
-    action_name, sqlx_path, error_msg = _extract_error_details(entry, raw_entry)
+    daemon = get_mocked_daemon()
+    action_name, sqlx_path, error_msg = daemon._extract_error_details(entry, raw_entry)
     assert action_name == "override_action"
     assert error_msg == "syntax error near SELECT"
     assert sqlx_path is None
 
 
-@patch("src.scout_daemon.notify")
-@patch("src.scout_daemon.trigger_claude_fix")
-@patch("src.scout_daemon.clone_and_checkout")
-@patch("src.scout_daemon.get_gcp_repo_url")
-def test_handle_entry_fixable_error(
-    mock_get_url: MagicMock, mock_clone: MagicMock, mock_trigger: MagicMock, mock_notify: MagicMock
-) -> None:
-    mock_get_url.return_value = "https://fake.repo.url"
-    mock_clone.return_value = ("fix/branch", "/tmp/path")
+def test_handle_entry_fixable_error() -> None:
+    daemon = get_mocked_daemon()
+    daemon.gcp_client.get_gcp_repo_url.return_value = "https://fake.repo.url"
+    daemon.git_ops.clone_and_checkout.return_value = ("fix/branch", "/tmp/path")
+    # For a fixable error, detect_error_code could return "syntaxError"
+    # and classify_error returns "FIXABLE_LLM"
+    daemon.error_classifier.detect_error_code.return_value = "syntaxError"
+    daemon.error_classifier.classify_error.return_value = "FIXABLE_LLM"
 
     raw_entry = {
         "jsonPayload": {
@@ -39,22 +49,24 @@ def test_handle_entry_fixable_error(
         "logName": "projects/test-proj/logs/dataform",
     }
 
-    _handle_entry(raw_entry)
+    daemon._handle_entry(raw_entry)
 
-    mock_get_url.assert_called_once_with("test-proj", "eu", "test_repo")
-    mock_clone.assert_called_once_with("https://fake.repo.url", "")
-    mock_trigger.assert_called_once_with(
+    daemon.gcp_client.get_gcp_repo_url.assert_called_once_with(
+        "test-proj", "eu", "test_repo"
+    )
+    daemon.git_ops.clone_and_checkout.assert_called_once_with(
+        "https://fake.repo.url", ""
+    )
+    daemon.invoker.trigger_claude_fix.assert_called_once_with(
         "test_action", None, "syntax error", "fix/branch", "/tmp/path"
     )
 
 
-@patch("src.scout_daemon.notify")
-@patch("src.scout_daemon.clone_and_checkout")
-@patch("src.scout_daemon.get_gcp_repo_url")
-def test_handle_entry_unfixable_error(
-    mock_get_url: MagicMock, mock_clone: MagicMock, mock_notify: MagicMock
-) -> None:
-    mock_get_url.return_value = "https://fake.repo.url"
+def test_handle_entry_unfixable_error() -> None:
+    daemon = get_mocked_daemon()
+    daemon.gcp_client.get_gcp_repo_url.return_value = "https://fake.repo.url"
+    daemon.error_classifier.detect_error_code.return_value = "accessDenied"
+    daemon.error_classifier.classify_error.return_value = "INFRA"
 
     raw_entry = {
         "jsonPayload": {"message": "permission denied"},
@@ -62,8 +74,8 @@ def test_handle_entry_unfixable_error(
         "logName": "projects/test-proj/logs/dataform",
     }
 
-    _handle_entry(raw_entry)
+    daemon._handle_entry(raw_entry)
 
-    mock_get_url.assert_called_once()
+    daemon.gcp_client.get_gcp_repo_url.assert_called_once()
     # Should not clone or trigger fix because permission denied is an INFRA error
-    mock_clone.assert_not_called()
+    daemon.git_ops.clone_and_checkout.assert_not_called()

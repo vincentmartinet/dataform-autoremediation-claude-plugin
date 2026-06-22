@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0] - 2026-06-22
+
+### Changed
+- `src/scout_daemon.py` & services - Refactored the core application into an Object-Oriented/Inversion of Control (IoC) architecture using Dependency Injection for all services (`GCPApiClient`, `GitOpsService`, `ErrorClassifier`, `ClaudeInvokerService`, `NotificationService`).
+- Updated `tests/` to use manual injection of mocked classes instead of `unittest.mock.patch`.
+- ADR-0009: Migrating to Object-Oriented Service Architecture with Dependency Injection.
+
 ## [0.7.0] - 2026-06-22
 
 ### Added

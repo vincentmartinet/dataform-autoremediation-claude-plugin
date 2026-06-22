@@ -44,47 +44,49 @@ INFRA_PATTERNS: list[str] = [
 ]
 
 
-def detect_error_code(error_msg: str) -> str:  # noqa: C901
-    """Detects a specific error code string from an unstructured error message."""
-    reason_lower = (error_msg or "").lower()
-    if "syntax error" in reason_lower:
-        return "syntaxError"
-    if (
-        "access denied" in reason_lower
-        or "permission denied" in reason_lower
-        or "does not have permission" in reason_lower
-    ):
-        return "accessDenied"
-    if "division by zero" in reason_lower:
-        return "jobFailed"
-    if "quota" in reason_lower:
-        return "quotaExceeded"
+class ErrorClassifier:
+    """Service for classifying BigQuery and Dataform errors."""
 
-    for code in FIXABLE_LLM_CODES:
-        if code.lower() in reason_lower:
-            return code
-    for code in INFRA_CODES:
-        if code.lower() in reason_lower:
-            return code
-    for code in DONNEES_CODES:
-        if code.lower() in reason_lower:
-            return code
-    return "unknown"
+    def detect_error_code(self, error_msg: str) -> str:  # noqa: C901
+        """Detects a specific error code string from an unstructured error message."""
+        reason_lower = (error_msg or "").lower()
+        if "syntax error" in reason_lower:
+            return "syntaxError"
+        if (
+            "access denied" in reason_lower
+            or "permission denied" in reason_lower
+            or "does not have permission" in reason_lower
+        ):
+            return "accessDenied"
+        if "division by zero" in reason_lower:
+            return "jobFailed"
+        if "quota" in reason_lower:
+            return "quotaExceeded"
 
+        for code in FIXABLE_LLM_CODES:
+            if code.lower() in reason_lower:
+                return code
+        for code in INFRA_CODES:
+            if code.lower() in reason_lower:
+                return code
+        for code in DONNEES_CODES:
+            if code.lower() in reason_lower:
+                return code
+        return "unknown"
 
-def classify_error(error_code: str, error_msg: str) -> str:
-    """Classifies an error into FIXABLE_LLM, INFRA, DATA, or UNKNOWN
-    based on its code and message."""
-    code_lower = (error_code or "").lower()
-    msg_lower = (error_msg or "").lower()
+    def classify_error(self, error_code: str, error_msg: str) -> str:
+        """Classifies an error into FIXABLE_LLM, INFRA, DATA, or UNKNOWN
+        based on its code and message."""
+        code_lower = (error_code or "").lower()
+        msg_lower = (error_msg or "").lower()
 
-    if code_lower in {c.lower() for c in FIXABLE_LLM_CODES}:
-        return "FIXABLE_LLM"
-    if code_lower in {c.lower() for c in INFRA_CODES}:
-        return "INFRA"
-    if code_lower in {c.lower() for c in DONNEES_CODES}:
-        return "DATA"
+        if code_lower in {c.lower() for c in FIXABLE_LLM_CODES}:
+            return "FIXABLE_LLM"
+        if code_lower in {c.lower() for c in INFRA_CODES}:
+            return "INFRA"
+        if code_lower in {c.lower() for c in DONNEES_CODES}:
+            return "DATA"
 
-    if any(p in msg_lower for p in INFRA_PATTERNS):
-        return "INFRA"
-    return "UNKNOWN"
+        if any(p in msg_lower for p in INFRA_PATTERNS):
+            return "INFRA"
+        return "UNKNOWN"

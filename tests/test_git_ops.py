@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.exceptions import GitOpsError
-from src.git_ops import clone_and_checkout
+from src.git_ops import GitOpsService
 
 
 @patch("src.git_ops.subprocess.run")
@@ -13,7 +13,8 @@ def test_clone_and_checkout_success(mock_run: MagicMock) -> None:
     mock_run.return_value.stdout = ""
     mock_run.return_value.returncode = 0
 
-    fix_branch, clone_path = clone_and_checkout("https://fake.url", "main")
+    git_ops = GitOpsService()
+    fix_branch, clone_path = git_ops.clone_and_checkout("https://fake.url", "main")
 
     assert fix_branch.startswith("fix/dataform-")
     assert "/tmp/dataform-scout-" in clone_path
@@ -41,12 +42,15 @@ def test_clone_and_checkout_success(mock_run: MagicMock) -> None:
 def test_clone_and_checkout_dirty_dir(mock_run: MagicMock) -> None:
     # Mock dirty status
     mock_run.side_effect = [
-        subprocess.CompletedProcess(args=[], returncode=0, stdout=""), # clone
-        subprocess.CompletedProcess(args=[], returncode=0, stdout=" M some_file.py\n") # status
+        subprocess.CompletedProcess(args=[], returncode=0, stdout=""),  # clone
+        subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=" M some_file.py\n"
+        ),  # status
     ]
 
+    git_ops = GitOpsService()
     with pytest.raises(GitOpsError) as exc_info:
-        clone_and_checkout("https://fake.url", None)
+        git_ops.clone_and_checkout("https://fake.url", None)
 
     assert "is dirty" in str(exc_info.value)
 
@@ -57,7 +61,8 @@ def test_clone_and_checkout_clone_failure(mock_run: MagicMock) -> None:
         1, "git", stderr="clone failed"
     )
 
+    git_ops = GitOpsService()
     with pytest.raises(GitOpsError) as exc_info:
-        clone_and_checkout("https://fake.url", None)
+        git_ops.clone_and_checkout("https://fake.url", None)
 
     assert "Clone failed" in str(exc_info.value)
