@@ -23,6 +23,47 @@ PLUGIN_ROOT = os.environ.get(
 SKILL_PATH = os.path.join(PLUGIN_ROOT, "skills", "fix-dataform", "SKILL.md")
 
 
+FIXABLE_LLM_CODES = {
+    "invalidQuery", "syntaxError", "unrecognizedName", "unrecognized name",
+    "fieldNotFound", "field not found", "typeMismatch", "type mismatch",
+    "noMatchingSignature", "no matching signature", "invalidArgument",
+    "invalid argument", "invalidFunctionArgument", "invalid function argument",
+    "scalarSubqueryProducedMoreThanOneElement", "scalar subquery produced more than one element",
+    "compilationError", "assertionFailed",
+}
+INFRA_CODES = {"accessDenied", "quotaExceeded", "rateLimitExceeded", "backendError", "serviceUnavailable", "internalError", "timeout"}
+DONNEES_CODES = {"invalidValue", "outOfRange", "jobFailed"}
+INFRA_PATTERNS = ["permission denied", "does not have permission", "dataset not found", "project not found", "quota", "credentials", "iam"]
+
+
+def detect_error_code(error_msg: str) -> str:
+    reason_lower = (error_msg or "").lower()
+    if "syntax error" in reason_lower: return "syntaxError"
+    if "access denied" in reason_lower or "permission denied" in reason_lower or "does not have permission" in reason_lower: return "accessDenied"
+    if "division by zero" in reason_lower: return "jobFailed"
+    if "quota" in reason_lower: return "quotaExceeded"
+    
+    for code in FIXABLE_LLM_CODES:
+        if code.lower() in reason_lower: return code
+    for code in INFRA_CODES:
+        if code.lower() in reason_lower: return code
+    for code in DONNEES_CODES:
+        if code.lower() in reason_lower: return code
+    return "unknown"
+
+
+def classify_error(error_code: str, error_msg: str) -> str:
+    code_lower = (error_code or "").lower()
+    msg_lower = (error_msg or "").lower()
+    
+    if code_lower in {c.lower() for c in FIXABLE_LLM_CODES}: return "FIXABLE_LLM"
+    if code_lower in {c.lower() for c in INFRA_CODES}: return "INFRA"
+    if code_lower in {c.lower() for c in DONNEES_CODES}: return "DATA"
+    
+    if any(p in msg_lower for p in INFRA_PATTERNS): return "INFRA"
+    return "UNKNOWN"
+
+
 def _load_scope_flags() -> list[str]:
     if not os.path.exists(CONFIG_FILE):
         return []
@@ -65,21 +106,28 @@ signal.signal(signal.SIGINT, _graceful_exit)
 signal.signal(signal.SIGTERM, _graceful_exit)
 
 
-def _extract_error_details(entry: dict) -> tuple[str | None, str | None]:
-    """Return (sqlx_file_path, error_message) from a log entry, or (None, None)."""
-    payload = entry.get("jsonPayload") or {}
+def _extract_error_details(entry: dict) -> tuple[str | None, str | None, str | None]:
+    """Return (action_name, sqlx_file_path, error_message) from a log entry."""
+    payload = entry.get("jsonPayload") or entry.get("protoPayload") or {}
     text = entry.get("textPayload", "")
 
     error_msg = (
         payload.get("message") or payload.get("error") or text or json.dumps(payload)
     )
 
+    action_name = None
+    labels = entry.get("labels", {})
+    if "action_name" in labels:
+        action_name = labels["action_name"]
+    elif "actionTarget" in payload and isinstance(payload["actionTarget"], dict):
+        action_name = payload["actionTarget"].get("name")
+
     # Try to find a .sqlx path anywhere in the serialised entry
     raw = json.dumps(entry)
     match = re.search(r"[\w./-]+\.sqlx", raw)
     sqlx_path = match.group(0) if match else None
 
-    return sqlx_path, error_msg
+    return action_name, sqlx_path, error_msg
 
 
 def _notify(title: str, message: str, subtitle: str = "", sound: str = "Basso") -> None:
@@ -104,7 +152,7 @@ def _create_fix_branch() -> str:
     return branch
 
 
-def _trigger_claude_fix(sqlx_path: str | None, error_msg: str, branch: str):
+def _trigger_claude_fix(action_name: str | None, sqlx_path: str | None, error_msg: str, branch: str):
     try:
         with open(SKILL_PATH) as f:
             system_prompt = f.read()
@@ -116,6 +164,8 @@ def _trigger_claude_fix(sqlx_path: str | None, error_msg: str, branch: str):
         f"Branch: {branch}",
         f"Error: {error_msg}",
     ]
+    if action_name:
+        prompt_lines.insert(0, f"Action: {action_name}")
     if sqlx_path:
         prompt_lines.insert(0, f"File: {sqlx_path}")
 
@@ -136,17 +186,31 @@ def _trigger_claude_fix(sqlx_path: str | None, error_msg: str, branch: str):
 
 
 def _handle_entry(entry: dict):
-    sqlx_path, error_msg = _extract_error_details(entry)
-    print(f"[scout] Error detected — file={sqlx_path or '(unknown)'}")
+    action_name, sqlx_path, error_msg = _extract_error_details(entry)
+    error_code = detect_error_code(error_msg)
+    category = classify_error(error_code, error_msg)
+    
+    target_display = action_name or sqlx_path or "(unknown)"
+    print(f"[scout] Error detected — target={target_display}, code={error_code}, category={category}")
+    
+    if category in ("INFRA", "DATA", "UNKNOWN"):
+        print(f"[scout] Skipping non-fixable error: {category}")
+        _notify(
+            title="Dataform Scout",
+            message=f"Skipped {category} error in {target_display}",
+            subtitle=f"Code: {error_code}",
+        )
+        return
+
     _notify(
         title="Dataform Scout",
-        message=f"Error in {sqlx_path or '(unknown)'}",
+        message=f"Error in {target_display}",
         subtitle="Creating fix branch…",
     )
     try:
         branch = _create_fix_branch()
         print(f"[scout] Created branch: {branch}")
-        _trigger_claude_fix(sqlx_path, error_msg, branch)
+        _trigger_claude_fix(action_name, sqlx_path, error_msg, branch)
     except subprocess.CalledProcessError as exc:
         print(f"[scout] git error: {exc}", file=sys.stderr)
 
