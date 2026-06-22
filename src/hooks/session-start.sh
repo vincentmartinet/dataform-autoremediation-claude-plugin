@@ -44,7 +44,8 @@ case "$scope_type" in
     ;;
 esac
 
-nohup python3 "${CLAUDE_PLUGIN_ROOT}/src/scout_daemon.py" \
+cd "${CLAUDE_PLUGIN_ROOT}"
+nohup python3 -m src.scout_daemon \
   > /tmp/dataform-scout.log 2>&1 &
 echo $! > "$PID_FILE"
 
