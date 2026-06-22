@@ -20,13 +20,12 @@ def test_extract_error_details() -> None:
     assert sqlx_path is None
 
 
+@patch("src.scout_daemon.notify")
 @patch("src.scout_daemon.trigger_claude_fix")
 @patch("src.scout_daemon.clone_and_checkout")
 @patch("src.scout_daemon.get_gcp_repo_url")
 def test_handle_entry_fixable_error(
-    mock_get_url: MagicMock,
-    mock_clone: MagicMock,
-    mock_trigger: MagicMock
+    mock_get_url: MagicMock, mock_clone: MagicMock, mock_trigger: MagicMock, mock_notify: MagicMock
 ) -> None:
     mock_get_url.return_value = "https://fake.repo.url"
     mock_clone.return_value = ("fix/branch", "/tmp/path")
@@ -49,11 +48,11 @@ def test_handle_entry_fixable_error(
     )
 
 
+@patch("src.scout_daemon.notify")
 @patch("src.scout_daemon.clone_and_checkout")
 @patch("src.scout_daemon.get_gcp_repo_url")
 def test_handle_entry_unfixable_error(
-    mock_get_url: MagicMock,
-    mock_clone: MagicMock
+    mock_get_url: MagicMock, mock_clone: MagicMock, mock_notify: MagicMock
 ) -> None:
     mock_get_url.return_value = "https://fake.repo.url"
 

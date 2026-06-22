@@ -4,6 +4,9 @@
 
 ### Added
 - Comprehensive test suite covering core modules (`tests/test_models.py`, `tests/test_error_classification.py`, `tests/test_gcp_api.py`, `tests/test_git_ops.py`, `tests/test_scout_daemon.py`) using `pytest` and `unittest.mock`.
+
+### Fixed
+- Tests no longer send actual macOS system notifications during execution (mocked `notify` in `test_scout_daemon.py`).
 - Static typing checks using `mypy` and configured strict typing rules.
 - Pre-commit configuration (`.pre-commit-config.yaml`) containing `ruff` (formatting and linting), `mypy`, `pylint`, and `pytest` to prevent malformed code submissions.
 
