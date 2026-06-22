@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.3] - 2026-06-22
+
+### Added
+- `src/scout_daemon.py` — implemented an in-memory deduplication cache (`_recent_failures`) with a 5-minute rolling window to prevent duplicate agent runs for identical errors.
+- `src/scout_daemon.py` — added `MAX_FIX_ATTEMPTS = 3` anti-loop circuit breaker. The agent now attempts to fix an issue up to 3 times, validating with `dataform compile`, and gracefully reverts via `git checkout .` on failure.
+
+### Changed
+- `src/scout_daemon.py` — refactored log entry parsing to use built-in Python `dataclasses` (`LogEntry`) for strict schema validation, removing loose dictionary `.get()` lookups while maintaining a zero-dependency architecture.
+
+### Fixed
+- `src/scout_daemon.py` — added `git status --porcelain` check before checking out fix branches to prevent overriding dirty working trees.
+- `src/scout_daemon.py` — added a global `try/except Exception` block in `_handle_entry` to ensure unexpected changes to the GCP log schema do not crash the daemon's real-time stream.
+
+---
+
 ## [0.5.2] - 2026-06-22
 
 ### Changed

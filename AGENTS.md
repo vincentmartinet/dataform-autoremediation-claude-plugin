@@ -22,7 +22,7 @@ This project is a native Claude Code Marketplace plugin (`dataform-scout`) that 
 You must strictly follow these constraints when writing, modifying, or testing code in this repository:
 
 ### 1. Python Stability & Defensive Coding
-- Use **Pydantic** models (`BaseModel`) to strictly validate incoming GCP log JSON. Never use loose dictionary lookups.
+- Use built-in Python `dataclasses` to strictly structure and validate incoming GCP log JSON, maintaining a zero-dependency architecture. Avoid loose dictionary lookups.
 - Wrap log parsing in `try/except` blocks to prevent the daemon from crashing if GCP updates its schema.
 - Before running the main loop, check the user's `PATH` for `gcloud`, `git`, and `dataform`. Gracefully exit with an error message if any are missing.
 

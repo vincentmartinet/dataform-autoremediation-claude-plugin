@@ -13,6 +13,8 @@ import subprocess
 import sys
 import urllib.request
 from datetime import datetime, timezone, timedelta
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
 
 
 GCLOUD = "gcloud"
@@ -23,6 +25,29 @@ PLUGIN_ROOT = os.environ.get(
     "CLAUDE_PLUGIN_ROOT", os.path.dirname(os.path.dirname(__file__))
 )
 SKILL_PATH = os.path.join(PLUGIN_ROOT, "skills", "fix-dataform", "SKILL.md")
+MAX_FIX_ATTEMPTS = 3
+_recent_failures: dict[str, datetime] = {}
+
+
+@dataclass
+class LogEntry:
+    jsonPayload: Optional[Dict[str, Any]] = None
+    protoPayload: Optional[Dict[str, Any]] = None
+    textPayload: str = ""
+    labels: Dict[str, str] = field(default_factory=dict)
+    resource: Dict[str, Any] = field(default_factory=dict)
+    logName: str = ""
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "LogEntry":
+        return cls(
+            jsonPayload=data.get("jsonPayload"),
+            protoPayload=data.get("protoPayload"),
+            textPayload=data.get("textPayload", ""),
+            labels=data.get("labels", {}),
+            resource=data.get("resource", {}),
+            logName=data.get("logName", ""),
+        )
 
 
 FIXABLE_LLM_CODES = {
@@ -151,24 +176,25 @@ signal.signal(signal.SIGINT, _graceful_exit)
 signal.signal(signal.SIGTERM, _graceful_exit)
 
 
-def _extract_error_details(entry: dict) -> tuple[str | None, str | None, str | None]:
+def _extract_error_details(
+    entry: LogEntry, raw_entry: dict
+) -> tuple[str | None, str | None, str | None]:
     """Return (action_name, sqlx_file_path, error_message) from a log entry."""
-    payload = entry.get("jsonPayload") or entry.get("protoPayload") or {}
-    text = entry.get("textPayload", "")
+    payload = entry.jsonPayload or entry.protoPayload or {}
+    text = entry.textPayload
 
     error_msg = (
         payload.get("message") or payload.get("error") or text or json.dumps(payload)
     )
 
     action_name = None
-    labels = entry.get("labels", {})
-    if "action_name" in labels:
-        action_name = labels["action_name"]
+    if "action_name" in entry.labels:
+        action_name = entry.labels["action_name"]
     elif "actionTarget" in payload and isinstance(payload["actionTarget"], dict):
         action_name = payload["actionTarget"].get("name")
 
     # Try to find a .sqlx path anywhere in the serialised entry
-    raw = json.dumps(entry)
+    raw = json.dumps(raw_entry)
     match = re.search(r"[\w./-]+\.sqlx", raw)
     sqlx_path = match.group(0) if match else None
 
@@ -254,6 +280,13 @@ def _clone_and_checkout(repo_url: str, branch: str | None) -> tuple[str, str]:
         ["gh", "repo", "clone", repo_url, clone_path], check=True, capture_output=True
     )
 
+    status = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=clone_path, capture_output=True, text=True
+    )
+    if status.stdout.strip():
+        print(f"[scout] Working directory {clone_path} is dirty. Aborting.")
+        raise subprocess.CalledProcessError(1, "git status")
+
     if branch:
         try:
             subprocess.run(
@@ -299,27 +332,56 @@ def _trigger_claude_fix(
 
     prompt = "\n".join(prompt_lines)
 
-    try:
-        subprocess.run(
-            [
-                "claude",
-                "--system-prompt",
-                system_prompt,
-                "--permission-mode",
-                "auto",
-                "-p",
-                prompt,
-            ],
-            text=True,
-            timeout=120,
-            cwd=wt_path,
-        )
-    except FileNotFoundError:
-        print("[scout] WARNING: `claude` CLI not found.", file=sys.stderr)
-    except subprocess.TimeoutExpired:
-        print(
-            "[scout] WARNING: claude fix attempt timed out after 120s.", file=sys.stderr
-        )
+    for attempt in range(1, MAX_FIX_ATTEMPTS + 1):
+        print(f"[scout] Claude fix attempt {attempt}/{MAX_FIX_ATTEMPTS}...")
+        try:
+            subprocess.run(
+                [
+                    "claude",
+                    "--system-prompt",
+                    system_prompt,
+                    "--permission-mode",
+                    "auto",
+                    "-p",
+                    prompt,
+                ],
+                text=True,
+                timeout=120,
+                cwd=wt_path,
+            )
+
+            compile_res = subprocess.run(
+                ["dataform", "compile"], cwd=wt_path, capture_output=True, text=True
+            )
+            if compile_res.returncode == 0:
+                print(f"[scout] Fix successful on attempt {attempt}.")
+                _notify(
+                    "Dataform Scout",
+                    "Fix successful!",
+                    f"Compiled successfully on attempt {attempt}",
+                )
+                return
+            else:
+                prompt = f"The previous fix did not resolve the error. Dataform compile output:\n{compile_res.stderr}\nPlease try again."
+        except FileNotFoundError:
+            print("[scout] WARNING: `claude` CLI not found.", file=sys.stderr)
+            return
+        except subprocess.TimeoutExpired:
+            print(
+                f"[scout] WARNING: claude fix attempt {attempt} timed out after 120s.",
+                file=sys.stderr,
+            )
+            prompt = "The previous fix attempt timed out. Please be more concise and try again."
+
+    print(f"[scout] Failed to fix after {MAX_FIX_ATTEMPTS} attempts. Reverting.")
+    subprocess.run(["git", "checkout", "."], cwd=wt_path)
+    subprocess.run(["git", "checkout", "-"], cwd=wt_path)
+    subprocess.run(["git", "branch", "-D", branch], cwd=wt_path)
+    _notify(
+        "Dataform Scout",
+        "Auto-fix failed",
+        f"Could not fix after {MAX_FIX_ATTEMPTS} attempts. Reverted changes.",
+    )
 
 
 def _fetch_workflow_failed_actions(
@@ -395,61 +457,85 @@ def _process_error_context(
         print(f"[scout] git error: {exc}", file=sys.stderr)
 
 
-def _handle_entry(entry: dict):
-    payload = entry.get("jsonPayload") or entry.get("protoPayload") or {}
-    type_str = payload.get("@type", "")
+def _handle_entry(raw_entry: dict):
+    global _recent_failures
+    try:
+        entry = LogEntry.from_dict(raw_entry)
+        payload = entry.jsonPayload or entry.protoPayload or {}
+        type_str = payload.get("@type", "")
 
-    resource_labels = entry.get("resource", {}).get("labels", {})
-    location = resource_labels.get("location", "")
-    repository_id = resource_labels.get("repository_id", "")
+        location = entry.resource.get("labels", {}).get("location", "")
+        repository_id = entry.resource.get("labels", {}).get("repository_id", "")
 
-    log_name = entry.get("logName", "")
-    project_id = log_name.split("/")[1] if log_name.startswith("projects/") else ""
+        project_id = (
+            entry.logName.split("/")[1] if entry.logName.startswith("projects/") else ""
+        )
+        workspace_id = entry.labels.get("workspace_id")
 
-    labels = entry.get("labels", {})
-    workspace_id = labels.get("workspace_id")
+        if (
+            type_str
+            == "type.googleapis.com/google.cloud.dataform.logging.v1.WorkflowInvocationCompletionLogEntry"
+        ):
+            if payload.get("terminalState") == "FAILED":
+                invocation_id = payload.get("workflowInvocationId")
 
-    if (
-        type_str
-        == "type.googleapis.com/google.cloud.dataform.logging.v1.WorkflowInvocationCompletionLogEntry"
-    ):
-        if payload.get("terminalState") == "FAILED":
-            invocation_id = payload.get("workflowInvocationId")
-
-            if invocation_id and location and repository_id and project_id:
-                print(
-                    f"[scout] Fetching failed actions for invocation {invocation_id}..."
-                )
-                failed_actions = _fetch_workflow_failed_actions(
-                    project_id, location, repository_id, invocation_id
-                )
-                branch = _fetch_workflow_branch(
-                    project_id, location, repository_id, invocation_id
-                )
-                for action in failed_actions:
-                    action_name = action.get("target", {}).get("name")
-                    error_msg = action.get("failureReason", "")
-                    _process_error_context(
-                        action_name,
-                        None,
-                        error_msg,
-                        project_id,
-                        location,
-                        repository_id,
-                        branch,
+                if invocation_id and location and repository_id and project_id:
+                    print(
+                        f"[scout] Fetching failed actions for invocation {invocation_id}..."
                     )
-                return
+                    failed_actions = _fetch_workflow_failed_actions(
+                        project_id, location, repository_id, invocation_id
+                    )
+                    branch = _fetch_workflow_branch(
+                        project_id, location, repository_id, invocation_id
+                    )
+                    for action in failed_actions:
+                        action_name = action.get("target", {}).get("name")
+                        error_msg = action.get("failureReason", "")
 
-    action_name, sqlx_path, error_msg = _extract_error_details(entry)
-    _process_error_context(
-        action_name,
-        sqlx_path,
-        error_msg,
-        project_id,
-        location,
-        repository_id,
-        workspace_id,
-    )
+                        cache_key = f"{project_id}:{repository_id}:{action_name}"
+                        now = datetime.now()
+                        if (
+                            cache_key in _recent_failures
+                            and (now - _recent_failures[cache_key]).total_seconds()
+                            < 300
+                        ):
+                            continue
+                        _recent_failures[cache_key] = now
+
+                        _process_error_context(
+                            action_name,
+                            None,
+                            error_msg,
+                            project_id,
+                            location,
+                            repository_id,
+                            branch,
+                        )
+                    return
+
+        action_name, sqlx_path, error_msg = _extract_error_details(entry, raw_entry)
+
+        cache_key = f"{project_id}:{repository_id}:{sqlx_path or action_name}"
+        now = datetime.now()
+        if (
+            cache_key in _recent_failures
+            and (now - _recent_failures[cache_key]).total_seconds() < 300
+        ):
+            return
+        _recent_failures[cache_key] = now
+
+        _process_error_context(
+            action_name,
+            sqlx_path,
+            error_msg,
+            project_id,
+            location,
+            repository_id,
+            workspace_id,
+        )
+    except Exception as e:
+        print(f"[scout] Error handling entry: {e}", file=sys.stderr)
 
 
 def _lookback():
