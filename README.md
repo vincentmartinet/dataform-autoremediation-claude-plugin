@@ -1,6 +1,6 @@
 # dataform-scout
 
-A Claude Code plugin that monitors Google Cloud Dataform error logs, automatically branches your local git repository when an error is caught, and instructs Claude Code to fix the failing `.sqlx` file — all using your active local credentials.
+A Claude Code plugin that monitors Google Cloud Dataform error logs. When an error is caught, it automatically clones the affected repository into a temporary directory, creates a fix branch, and instructs headless Claude Code to fix the failing `.sqlx` file — all using your active local credentials.
 
 ## Prerequisites
 
@@ -10,13 +10,18 @@ A Claude Code plugin that monitors Google Cloud Dataform error logs, automatical
 | `gcloud alpha` component | `gcloud components list \| grep alpha` |
 | `dataform` CLI | `dataform --version` |
 | `claude` CLI | `claude --version` |
+| `git` CLI | `git --version` |
+| `gh` CLI | `gh --version` |
 | Active gcloud auth | `gcloud auth list` (at least one `*` account) |
+| Active gh auth | `gh auth status` |
 | Correct project set | `gcloud config list project` |
 
 Install missing components:
 ```sh
 gcloud components install alpha
 npm install -g @dataform/cli
+brew install gh # (On macOS)
+gh auth login
 ```
 
 ## Installation
@@ -47,23 +52,26 @@ This will ask for a project ID, folder ID, or organization ID and write the conf
 The scout daemon starts **automatically** when Claude Code launches (via the `SessionStart` hook), as long as a config exists. No manual command needed.
 
 For each error detected, the plugin will:
-- Create a local branch `fix/dataform-<timestamp>`.
-- Invoke the `fix-dataform` skill to read, patch, and verify the failing `.sqlx` file.
-- Show you the diff and ask for confirmation before leaving the branch in place.
+- Deduplicate identical errors within a 5-minute rolling window.
+- Fetch the Git remote URL and failing workspace branch directly from the Dataform API.
+- Clone the repository to `/tmp/dataform-scout-<timestamp>` and create a new branch `fix/dataform-<timestamp>`.
+- Invoke the `fix-dataform` skill headlessly to read, patch, and verify the failing `.sqlx` file.
+- Attempt to fix the compilation error up to 3 times (anti-loop circuit breaker).
+- Notify you natively via macOS notifications when an error is caught and when a fix succeeds or fails.
 
-The plugin **never** pushes to any remote.
+The plugin operates fully isolated in `/tmp` and **never** pushes to any remote.
 
-## Verifying gcloud authentication
+## Verifying authentication
 
 ```sh
-# Check active accounts
+# Check active Google Cloud accounts
 gcloud auth list
 
 # Check active project
 gcloud config list project
 
 # Test log access manually
-gcloud logging read 'resource.type="dataform.googleapis.com/Repository" AND severity=ERROR' \
+gcloud logging read 'resource.type="dataform.googleapis.com/Repository" AND severity>=ERROR' \
   --format=json --limit=5
 ```
 
@@ -71,4 +79,5 @@ gcloud logging read 'resource.type="dataform.googleapis.com/Repository" AND seve
 
 - **`gcloud alpha logging tail` not found** — install the alpha component: `gcloud components install alpha`.
 - **No logs returned** — confirm your active project has Dataform repositories and that Cloud Logging is enabled.
-- **`claude` not found** — ensure Claude Code CLI is installed and on your `PATH`.
+- **`claude` or `gh` not found** — ensure both the Claude Code CLI and GitHub CLI are installed and on your `PATH`.
+- **Repository clone fails** — ensure you are authenticated with GitHub CLI via `gh auth login` and have access to the Dataform repository.
