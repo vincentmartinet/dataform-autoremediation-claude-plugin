@@ -1,6 +1,6 @@
 [project]
 name = "dataform-scout"
-version = "0.1.0"
+version = "0.7.0"
 description = "Dataform Scout Daemon"
 readme = "README.md"
 requires-python = ">=3.11"
