@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.6.0] - 2026-06-22
+
+### Changed
+- `src/scout_daemon.py` — Refactored the monolithic daemon into multiple modular files (`models.py`, `error_classification.py`, `gcp_api.py`, `git_ops.py`, `claude_invoker.py`, `notifications.py`, `constants.py`) to improve readability, maintainability, and testing.
+- ADR-0008: Documented the decision to modularize the Scout Daemon.
+
 ## [0.5.3] - 2026-06-22
 
 ### Added

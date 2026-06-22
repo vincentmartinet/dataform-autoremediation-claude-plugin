@@ -11,127 +11,21 @@ import shutil
 import signal
 import subprocess
 import sys
-import urllib.request
 from datetime import datetime, timezone, timedelta
-from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
 
-
-GCLOUD = "gcloud"
-PID_FILE = "/tmp/dataform-scout.pid"
-CONFIG_FILE = os.path.expanduser("~/.config/dataform-scout/config")
-LOG_FILTER = 'resource.type="dataform.googleapis.com/Repository" AND severity>=ERROR'
-PLUGIN_ROOT = os.environ.get(
-    "CLAUDE_PLUGIN_ROOT", os.path.dirname(os.path.dirname(__file__))
+from constants import CONFIG_FILE, GCLOUD, LOG_FILTER, PID_FILE
+from models import LogEntry
+from error_classification import detect_error_code, classify_error
+from gcp_api import (
+    get_gcp_repo_url,
+    fetch_workflow_branch,
+    fetch_workflow_failed_actions,
 )
-SKILL_PATH = os.path.join(PLUGIN_ROOT, "skills", "fix-dataform", "SKILL.md")
-MAX_FIX_ATTEMPTS = 3
+from git_ops import clone_and_checkout
+from claude_invoker import trigger_claude_fix
+from notifications import notify
+
 _recent_failures: dict[str, datetime] = {}
-
-
-@dataclass
-class LogEntry:
-    jsonPayload: Optional[Dict[str, Any]] = None
-    protoPayload: Optional[Dict[str, Any]] = None
-    textPayload: str = ""
-    labels: Dict[str, str] = field(default_factory=dict)
-    resource: Dict[str, Any] = field(default_factory=dict)
-    logName: str = ""
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "LogEntry":
-        return cls(
-            jsonPayload=data.get("jsonPayload"),
-            protoPayload=data.get("protoPayload"),
-            textPayload=data.get("textPayload", ""),
-            labels=data.get("labels", {}),
-            resource=data.get("resource", {}),
-            logName=data.get("logName", ""),
-        )
-
-
-FIXABLE_LLM_CODES = {
-    "invalidQuery",
-    "syntaxError",
-    "unrecognizedName",
-    "unrecognized name",
-    "fieldNotFound",
-    "field not found",
-    "typeMismatch",
-    "type mismatch",
-    "noMatchingSignature",
-    "no matching signature",
-    "invalidArgument",
-    "invalid argument",
-    "invalidFunctionArgument",
-    "invalid function argument",
-    "scalarSubqueryProducedMoreThanOneElement",
-    "scalar subquery produced more than one element",
-    "compilationError",
-    "assertionFailed",
-}
-INFRA_CODES = {
-    "accessDenied",
-    "quotaExceeded",
-    "rateLimitExceeded",
-    "backendError",
-    "serviceUnavailable",
-    "internalError",
-    "timeout",
-}
-DONNEES_CODES = {"invalidValue", "outOfRange", "jobFailed"}
-INFRA_PATTERNS = [
-    "permission denied",
-    "does not have permission",
-    "dataset not found",
-    "project not found",
-    "quota",
-    "credentials",
-    "iam",
-]
-
-
-def detect_error_code(error_msg: str) -> str:
-    reason_lower = (error_msg or "").lower()
-    if "syntax error" in reason_lower:
-        return "syntaxError"
-    if (
-        "access denied" in reason_lower
-        or "permission denied" in reason_lower
-        or "does not have permission" in reason_lower
-    ):
-        return "accessDenied"
-    if "division by zero" in reason_lower:
-        return "jobFailed"
-    if "quota" in reason_lower:
-        return "quotaExceeded"
-
-    for code in FIXABLE_LLM_CODES:
-        if code.lower() in reason_lower:
-            return code
-    for code in INFRA_CODES:
-        if code.lower() in reason_lower:
-            return code
-    for code in DONNEES_CODES:
-        if code.lower() in reason_lower:
-            return code
-    return "unknown"
-
-
-def classify_error(error_code: str, error_msg: str) -> str:
-    code_lower = (error_code or "").lower()
-    msg_lower = (error_msg or "").lower()
-
-    if code_lower in {c.lower() for c in FIXABLE_LLM_CODES}:
-        return "FIXABLE_LLM"
-    if code_lower in {c.lower() for c in INFRA_CODES}:
-        return "INFRA"
-    if code_lower in {c.lower() for c in DONNEES_CODES}:
-        return "DATA"
-
-    if any(p in msg_lower for p in INFRA_PATTERNS):
-        return "INFRA"
-    return "UNKNOWN"
 
 
 def _load_scope_flags() -> list[str]:
@@ -158,7 +52,6 @@ def _load_scope_flags() -> list[str]:
 
 
 SCOPE_FLAGS = _load_scope_flags()
-
 _tail_proc = None
 
 
@@ -201,216 +94,6 @@ def _extract_error_details(
     return action_name, sqlx_path, error_msg
 
 
-def _notify(title: str, message: str, subtitle: str = "", sound: str = "Basso") -> None:
-    safe_title = title.replace('"', "'")
-    safe_message = message.replace('"', "'")
-    safe_subtitle = subtitle.replace('"', "'")
-    subtitle_clause = f' subtitle "{safe_subtitle}"' if safe_subtitle else ""
-    sound_clause = f' sound name "{sound}"' if sound else ""
-    script = (
-        f'display notification "{safe_message}"'
-        f' with title "{safe_title}"'
-        f"{subtitle_clause}"
-        f"{sound_clause}"
-    )
-    subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True)
-
-
-def _get_gcp_repo_url(project_id: str, location: str, repository_id: str) -> str | None:
-    try:
-        token_proc = subprocess.run(
-            [GCLOUD, "auth", "print-access-token"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        token = token_proc.stdout.strip()
-        url = f"https://dataform.googleapis.com/v1/projects/{project_id}/locations/{location}/repositories/{repository_id}"
-        req = urllib.request.Request(url)
-        req.add_header("Authorization", f"Bearer {token}")
-        with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read().decode("utf-8"))
-
-        return data.get("gitRemoteSettings", {}).get("url")
-    except Exception as e:
-        print(f"[scout] Failed to fetch repo url: {e}", file=sys.stderr)
-    return None
-
-
-def _fetch_workflow_branch(
-    project_id: str, location: str, repository_id: str, invocation_id: str
-) -> str | None:
-    try:
-        token_proc = subprocess.run(
-            [GCLOUD, "auth", "print-access-token"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        token = token_proc.stdout.strip()
-        url = f"https://dataform.googleapis.com/v1/projects/{project_id}/locations/{location}/repositories/{repository_id}/workflowInvocations/{invocation_id}"
-        req = urllib.request.Request(url)
-        req.add_header("Authorization", f"Bearer {token}")
-        with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read().decode("utf-8"))
-
-        commitish = data.get("invocationConfig", {}).get("gitCommitish")
-        if commitish:
-            return commitish
-
-        cr_name = data.get("compilationResult")
-        if cr_name:
-            url_cr = f"https://dataform.googleapis.com/v1/{cr_name}"
-            req_cr = urllib.request.Request(url_cr)
-            req_cr.add_header("Authorization", f"Bearer {token}")
-            with urllib.request.urlopen(req_cr) as response_cr:
-                cr_data = json.loads(response_cr.read().decode("utf-8"))
-                return cr_data.get("gitCommitish")
-    except Exception as e:
-        print(f"[scout] Failed to fetch workflow branch: {e}", file=sys.stderr)
-    return None
-
-
-def _clone_and_checkout(repo_url: str, branch: str | None) -> tuple[str, str]:
-    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    clone_path = os.path.realpath(f"/tmp/dataform-scout-{ts}")
-    fix_branch = f"fix/dataform-{ts}"
-
-    subprocess.run(
-        ["gh", "repo", "clone", repo_url, clone_path], check=True, capture_output=True
-    )
-
-    status = subprocess.run(
-        ["git", "status", "--porcelain"], cwd=clone_path, capture_output=True, text=True
-    )
-    if status.stdout.strip():
-        print(f"[scout] Working directory {clone_path} is dirty. Aborting.")
-        raise subprocess.CalledProcessError(1, "git status")
-
-    if branch:
-        try:
-            subprocess.run(
-                ["git", "checkout", branch],
-                cwd=clone_path,
-                check=True,
-                capture_output=True,
-            )
-        except subprocess.CalledProcessError:
-            pass
-
-    subprocess.run(
-        ["git", "checkout", "-b", fix_branch],
-        cwd=clone_path,
-        check=True,
-        capture_output=True,
-    )
-    return fix_branch, clone_path
-
-
-def _trigger_claude_fix(
-    action_name: str | None,
-    sqlx_path: str | None,
-    error_msg: str,
-    branch: str,
-    wt_path: str,
-):
-    try:
-        with open(SKILL_PATH) as f:
-            system_prompt = f.read()
-    except OSError as exc:
-        print(f"[scout] Cannot read skill file {SKILL_PATH}: {exc}", file=sys.stderr)
-        return
-
-    prompt_lines = [
-        f"Branch: {branch}",
-        f"Error: {error_msg}",
-    ]
-    if action_name:
-        prompt_lines.insert(0, f"Action: {action_name}")
-    if sqlx_path:
-        prompt_lines.insert(0, f"File: {sqlx_path}")
-
-    prompt = "\n".join(prompt_lines)
-
-    for attempt in range(1, MAX_FIX_ATTEMPTS + 1):
-        print(f"[scout] Claude fix attempt {attempt}/{MAX_FIX_ATTEMPTS}...")
-        try:
-            subprocess.run(
-                [
-                    "claude",
-                    "--system-prompt",
-                    system_prompt,
-                    "--permission-mode",
-                    "auto",
-                    "-p",
-                    prompt,
-                ],
-                text=True,
-                timeout=120,
-                cwd=wt_path,
-            )
-
-            compile_res = subprocess.run(
-                ["dataform", "compile"], cwd=wt_path, capture_output=True, text=True
-            )
-            if compile_res.returncode == 0:
-                print(f"[scout] Fix successful on attempt {attempt}.")
-                _notify(
-                    "Dataform Scout",
-                    "Fix successful!",
-                    f"Compiled successfully on attempt {attempt}",
-                )
-                return
-            else:
-                prompt = f"The previous fix did not resolve the error. Dataform compile output:\n{compile_res.stderr}\nPlease try again."
-        except FileNotFoundError:
-            print("[scout] WARNING: `claude` CLI not found.", file=sys.stderr)
-            return
-        except subprocess.TimeoutExpired:
-            print(
-                f"[scout] WARNING: claude fix attempt {attempt} timed out after 120s.",
-                file=sys.stderr,
-            )
-            prompt = "The previous fix attempt timed out. Please be more concise and try again."
-
-    print(f"[scout] Failed to fix after {MAX_FIX_ATTEMPTS} attempts. Reverting.")
-    subprocess.run(["git", "checkout", "."], cwd=wt_path)
-    subprocess.run(["git", "checkout", "-"], cwd=wt_path)
-    subprocess.run(["git", "branch", "-D", branch], cwd=wt_path)
-    _notify(
-        "Dataform Scout",
-        "Auto-fix failed",
-        f"Could not fix after {MAX_FIX_ATTEMPTS} attempts. Reverted changes.",
-    )
-
-
-def _fetch_workflow_failed_actions(
-    project_id: str, location: str, repository_id: str, invocation_id: str
-) -> list[dict]:
-    try:
-        token_proc = subprocess.run(
-            [GCLOUD, "auth", "print-access-token"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        token = token_proc.stdout.strip()
-        url = f"https://dataform.googleapis.com/v1/projects/{project_id}/locations/{location}/repositories/{repository_id}/workflowInvocations/{invocation_id}:query"
-        req = urllib.request.Request(url)
-        req.add_header("Authorization", f"Bearer {token}")
-        with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read().decode("utf-8"))
-
-        failed = []
-        for action in data.get("workflowInvocationActions", []):
-            if action.get("state") == "FAILED":
-                failed.append(action)
-        return failed
-    except Exception as e:
-        print(f"[scout] Failed to fetch workflow actions: {e}", file=sys.stderr)
-        return []
-
-
 def _process_error_context(
     action_name: str | None,
     sqlx_path: str | None,
@@ -420,7 +103,7 @@ def _process_error_context(
     repository_id: str,
     branch: str | None,
 ):
-    repo_url = _get_gcp_repo_url(project_id, location, repository_id)
+    repo_url = get_gcp_repo_url(project_id, location, repository_id)
     if not repo_url:
         print(
             f"[scout] Could not deduce Git remote URL for {project_id}/{repository_id}. Skipping."
@@ -437,22 +120,22 @@ def _process_error_context(
 
     if category in ("INFRA", "DATA", "UNKNOWN"):
         print(f"[scout] Skipping non-fixable error: {category}")
-        _notify(
+        notify(
             title="Dataform Scout",
             message=f"Skipped {category} error in {target_display}",
             subtitle=f"Code: {error_code}",
         )
         return
 
-    _notify(
+    notify(
         title="Dataform Scout",
         message=f"Error in {target_display}",
         subtitle="Cloning repository for fix…",
     )
     try:
-        fix_branch, clone_path = _clone_and_checkout(repo_url, branch)
+        fix_branch, clone_path = clone_and_checkout(repo_url, branch)
         print(f"[scout] Cloned to {clone_path} on branch {fix_branch}")
-        _trigger_claude_fix(action_name, sqlx_path, error_msg, fix_branch, clone_path)
+        trigger_claude_fix(action_name, sqlx_path, error_msg, fix_branch, clone_path)
     except subprocess.CalledProcessError as exc:
         print(f"[scout] git error: {exc}", file=sys.stderr)
 
@@ -483,10 +166,10 @@ def _handle_entry(raw_entry: dict):
                     print(
                         f"[scout] Fetching failed actions for invocation {invocation_id}..."
                     )
-                    failed_actions = _fetch_workflow_failed_actions(
+                    failed_actions = fetch_workflow_failed_actions(
                         project_id, location, repository_id, invocation_id
                     )
-                    branch = _fetch_workflow_branch(
+                    branch = fetch_workflow_branch(
                         project_id, location, repository_id, invocation_id
                     )
                     for action in failed_actions:
