@@ -15,6 +15,7 @@
 - `SKILL_PATH` in `src/scout_daemon.py` pointed to non-existent `src/skills/fix_dataform.md`; corrected to `skills/fix-dataform/SKILL.md` where the skill actually lives.
 - `_trigger_claude_fix` no longer passes the skill path as a string in the user prompt (causing "Permission denied for skill file" from Claude Code). Now reads the skill file content and passes it as `--system-prompt` to the headless `claude` invocation.
 - Removed the unused `tempfile` import left over from the previous broken implementation.
+- `_get_gcp_repo_url` now uses the Dataform REST API via `urllib` instead of the `gcloud dataform` CLI component, which may not be installed or available by default, preventing silent failures when deducing the Git remote URL.
 
 ## [0.4.0] - 2026-06-19
 

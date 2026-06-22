@@ -191,26 +191,22 @@ def _notify(title: str, message: str, subtitle: str = "", sound: str = "Basso") 
 
 def _get_gcp_repo_url(project_id: str, location: str, repository_id: str) -> str | None:
     try:
-        res = subprocess.run(
-            [
-                GCLOUD,
-                "dataform",
-                "repositories",
-                "describe",
-                repository_id,
-                "--location",
-                location,
-                "--project",
-                project_id,
-                "--format=value(gitRemoteSettings.url)",
-            ],
+        token_proc = subprocess.run(
+            [GCLOUD, "auth", "print-access-token"],
             capture_output=True,
             text=True,
+            check=True,
         )
-        if res.returncode == 0 and res.stdout.strip():
-            return res.stdout.strip()
-    except Exception:
-        pass
+        token = token_proc.stdout.strip()
+        url = f"https://dataform.googleapis.com/v1/projects/{project_id}/locations/{location}/repositories/{repository_id}"
+        req = urllib.request.Request(url)
+        req.add_header("Authorization", f"Bearer {token}")
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        
+        return data.get("gitRemoteSettings", {}).get("url")
+    except Exception as e:
+        print(f"[scout] Failed to fetch repo url: {e}", file=sys.stderr)
     return None
 
 
