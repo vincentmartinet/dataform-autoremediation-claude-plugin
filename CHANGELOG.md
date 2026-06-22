@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.2] - 2026-06-22
+
+### Changed
+- `src/scout_daemon.py` — uses the `gh repo clone` command instead of `git clone` to seamlessly handle authentication for GitHub repositories.
+- `src/scout_daemon.py` — added a startup dependency check for `gcloud`, `git`, `dataform`, and `gh` executables before running the main loop.
+
+---
+
 ## [0.5.1] - 2026-06-22
 
 ### Fixed

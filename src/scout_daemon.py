@@ -7,6 +7,7 @@ Relies entirely on the active `gcloud` configuration. Never pushes to remote.
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -203,7 +204,7 @@ def _get_gcp_repo_url(project_id: str, location: str, repository_id: str) -> str
         req.add_header("Authorization", f"Bearer {token}")
         with urllib.request.urlopen(req) as response:
             data = json.loads(response.read().decode("utf-8"))
-        
+
         return data.get("gitRemoteSettings", {}).get("url")
     except Exception as e:
         print(f"[scout] Failed to fetch repo url: {e}", file=sys.stderr)
@@ -249,9 +250,8 @@ def _clone_and_checkout(repo_url: str, branch: str | None) -> tuple[str, str]:
     clone_path = f"/tmp/dataform-scout-{ts}"
     fix_branch = f"fix/dataform-{ts}"
 
-    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
     subprocess.run(
-        ["git", "clone", repo_url, clone_path], check=True, capture_output=True, env=env
+        ["gh", "repo", "clone", repo_url, clone_path], check=True, capture_output=True
     )
 
     if branch:
@@ -488,6 +488,20 @@ def _stream():
             pass  # accumulate multi-line JSON
 
 
+def check_dependencies():
+    missing = []
+    for cmd in ["gcloud", "git", "dataform", "gh"]:
+        if shutil.which(cmd) is None:
+            missing.append(cmd)
+    if missing:
+        print(
+            f"[scout] Error: Missing required executables in PATH: {', '.join(missing)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
 if __name__ == "__main__":
+    check_dependencies()
     _lookback()
     _stream()
