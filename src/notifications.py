@@ -1,4 +1,5 @@
 """Notifications module for sending macOS system alerts."""
+
 import logging
 import subprocess
 

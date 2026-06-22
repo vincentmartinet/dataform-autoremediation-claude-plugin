@@ -1,4 +1,5 @@
 """GCP API operations module."""
+
 import json
 import logging
 import subprocess

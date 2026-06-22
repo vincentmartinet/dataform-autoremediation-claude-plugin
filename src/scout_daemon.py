@@ -117,6 +117,7 @@ def _process_error_context(
     location: str,
     repository_id: str,
     branch: str | None,
+    timestamp: str,
 ) -> None:
     repo_url = get_gcp_repo_url(project_id, location, repository_id)
     if not repo_url:
@@ -131,8 +132,8 @@ def _process_error_context(
 
     target_display = action_name or sqlx_path or "(unknown)"
     logger.info(
-        f"Error detected — target={target_display}, code={error_code}, "
-        f"category={category}"
+        f"[{timestamp}] Caught {error_code} on {target_display} "
+        f"in repo {repository_id}... category={category}"
     )
 
     if category in ("INFRA", "DATA", "UNKNOWN"):
@@ -209,6 +210,7 @@ def _handle_entry(raw_entry: dict[str, Any]) -> None:
                         location,
                         repository_id,
                         branch,
+                        entry.timestamp,
                     )
                 return
 
@@ -228,6 +230,7 @@ def _handle_entry(raw_entry: dict[str, Any]) -> None:
             location,
             repository_id,
             workspace_id,
+            entry.timestamp,
         )
     except Exception as e:
         logger.error(f"Error handling entry: {e}", exc_info=True)

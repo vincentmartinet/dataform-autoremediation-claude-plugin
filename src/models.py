@@ -1,4 +1,5 @@
 """Data models for log entries and payload."""
+
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -6,6 +7,7 @@ from typing import Any
 @dataclass
 class ActionTarget:
     """Action target from log payload."""
+
     name: str = ""
 
     @classmethod
@@ -19,6 +21,7 @@ class ActionTarget:
 @dataclass
 class Payload:
     """Payload structure from log entry."""
+
     message: str = ""
     error: str = ""
     type_str: str = ""
@@ -50,6 +53,7 @@ class Payload:
 @dataclass
 class ResourceLabels:
     """Labels from log resource."""
+
     location: str = ""
     repository_id: str = ""
 
@@ -67,6 +71,7 @@ class ResourceLabels:
 @dataclass
 class Resource:
     """Resource structure from log entry."""
+
     labels: ResourceLabels = field(default_factory=ResourceLabels)
 
     @classmethod
@@ -80,6 +85,7 @@ class Resource:
 @dataclass
 class LogEntryLabels:
     """Labels from log entry."""
+
     action_name: str = ""
     workspace_id: str = ""
 
@@ -97,11 +103,13 @@ class LogEntryLabels:
 @dataclass
 class LogEntry:
     """Top-level Google Cloud logging entry."""
+
     text_payload: str = ""
     payload: Payload = field(default_factory=Payload)
     labels: LogEntryLabels = field(default_factory=LogEntryLabels)
     resource: Resource = field(default_factory=Resource)
     log_name: str = ""
+    timestamp: str = ""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "LogEntry":
@@ -122,6 +130,7 @@ class LogEntry:
             labels=LogEntryLabels.from_dict(data.get("labels", {})),
             resource=Resource.from_dict(data.get("resource", {})),
             log_name=data.get("logName", ""),
+            timestamp=data.get("timestamp", ""),
         )
 
     @property

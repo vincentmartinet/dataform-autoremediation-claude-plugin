@@ -1,4 +1,5 @@
 """Module for invoking headless Claude Code logic."""
+
 import logging
 import subprocess
 

@@ -1,4 +1,5 @@
 """Git operations module."""
+
 import logging
 import os
 import subprocess

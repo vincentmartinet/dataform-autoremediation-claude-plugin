@@ -48,4 +48,4 @@ nohup python3 "${CLAUDE_PLUGIN_ROOT}/src/scout_daemon.py" \
   > /tmp/dataform-scout.log 2>&1 &
 echo $! > "$PID_FILE"
 
-printf '{"systemMessage": "Dataform Scout started — listening to %s logs (%s)."}\n' "$scope_type" "$scope_id"
+printf '{"systemMessage": "[%s] Dataform Scout started — listening to %s logs (%s)."}\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$scope_type" "$scope_id"

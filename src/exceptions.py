@@ -1,5 +1,6 @@
 """Custom exceptions for the Dataform Scout daemon."""
 
+
 class ScoutError(Exception):
     """Base class for all Scout-specific exceptions."""
 

@@ -73,7 +73,8 @@ def detect_error_code(error_msg: str) -> str:  # noqa: C901
 
 
 def classify_error(error_code: str, error_msg: str) -> str:
-    """Classifies an error into FIXABLE_LLM, INFRA, DATA, or UNKNOWN based on its code and message."""
+    """Classifies an error into FIXABLE_LLM, INFRA, DATA, or UNKNOWN
+    based on its code and message."""
     code_lower = (error_code or "").lower()
     msg_lower = (error_msg or "").lower()
 
