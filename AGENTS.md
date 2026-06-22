@@ -47,7 +47,7 @@ You must strictly follow these constraints when writing, modifying, or testing c
 
 ## Mandatory Task Completion Checklist
 BEFORE informing the user that a coding task or feature is complete, you MUST execute the following checklist. Do not end your turn until all applicable steps are done:
-1. **Update CHANGELOG.md**: Document every meaningful change under the current version using Keep a Changelog conventions.
+1. **Update CHANGELOG.md**: Document every meaningful change under the current version using Keep a Changelog conventions and Semantic Versioning (semver).
 2. **Create/Update ADR**: For significant architectural decisions, create an ADR under `docs/adr/` using `docs/adr/template.md`.
 3. **Commit Code**: Run `git status`, add the modified files, and `git commit -m` with a descriptive summary.
 
