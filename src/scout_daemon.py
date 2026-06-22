@@ -10,6 +10,7 @@ import re
 import signal
 import subprocess
 import sys
+import urllib.request
 from datetime import datetime, timezone, timedelta
 
 
@@ -185,8 +186,27 @@ def _trigger_claude_fix(action_name: str | None, sqlx_path: str | None, error_ms
         )
 
 
-def _handle_entry(entry: dict):
-    action_name, sqlx_path, error_msg = _extract_error_details(entry)
+def _fetch_workflow_failed_actions(project_id: str, location: str, repository_id: str, invocation_id: str) -> list[dict]:
+    try:
+        token_proc = subprocess.run([GCLOUD, "auth", "print-access-token"], capture_output=True, text=True, check=True)
+        token = token_proc.stdout.strip()
+        url = f"https://dataform.googleapis.com/v1/projects/{project_id}/locations/{location}/repositories/{repository_id}/workflowInvocations/{invocation_id}:query"
+        req = urllib.request.Request(url)
+        req.add_header("Authorization", f"Bearer {token}")
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        
+        failed = []
+        for action in data.get("workflowInvocationActions", []):
+            if action.get("state") == "FAILED":
+                failed.append(action)
+        return failed
+    except Exception as e:
+        print(f"[scout] Failed to fetch workflow actions: {e}", file=sys.stderr)
+        return []
+
+
+def _process_error_context(action_name: str | None, sqlx_path: str | None, error_msg: str):
     error_code = detect_error_code(error_msg)
     category = classify_error(error_code, error_msg)
     
@@ -213,6 +233,33 @@ def _handle_entry(entry: dict):
         _trigger_claude_fix(action_name, sqlx_path, error_msg, branch)
     except subprocess.CalledProcessError as exc:
         print(f"[scout] git error: {exc}", file=sys.stderr)
+
+
+def _handle_entry(entry: dict):
+    payload = entry.get("jsonPayload") or entry.get("protoPayload") or {}
+    type_str = payload.get("@type", "")
+    
+    if type_str == "type.googleapis.com/google.cloud.dataform.logging.v1.WorkflowInvocationCompletionLogEntry":
+        if payload.get("terminalState") == "FAILED":
+            invocation_id = payload.get("workflowInvocationId")
+            resource_labels = entry.get("resource", {}).get("labels", {})
+            location = resource_labels.get("location")
+            repository_id = resource_labels.get("repository_id")
+            
+            log_name = entry.get("logName", "")
+            project_id = log_name.split("/")[1] if log_name.startswith("projects/") else ""
+            
+            if invocation_id and location and repository_id and project_id:
+                print(f"[scout] Fetching failed actions for invocation {invocation_id}...")
+                failed_actions = _fetch_workflow_failed_actions(project_id, location, repository_id, invocation_id)
+                for action in failed_actions:
+                    action_name = action.get("target", {}).get("name")
+                    error_msg = action.get("failureReason", "")
+                    _process_error_context(action_name, None, error_msg)
+                return
+
+    action_name, sqlx_path, error_msg = _extract_error_details(entry)
+    _process_error_context(action_name, sqlx_path, error_msg)
 
 
 def _lookback():
