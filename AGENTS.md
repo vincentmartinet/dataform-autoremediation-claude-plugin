@@ -49,7 +49,8 @@ You must strictly follow these constraints when writing, modifying, or testing c
 BEFORE informing the user that a coding task or feature is complete, you MUST execute the following checklist. Do not end your turn until all applicable steps are done:
 1. **Update CHANGELOG.md**: Document every meaningful change under the current version using Keep a Changelog conventions and Semantic Versioning (semver).
 2. **Create/Update ADR**: For significant architectural decisions, create an ADR under `docs/adr/` using `docs/adr/template.md`.
-3. **Commit Code**: Run `git status`, add the modified files, and `git commit -m` with a descriptive summary.
+3. **Update README.md**: Ensure that the `README.md` is kept up-to-date with any changes to the architecture, prerequisites, or usage instructions.
+4. **Commit Code**: Run `git status`, add the modified files, and `git commit -m` with a descriptive summary.
 
 ## Important
 If input is "ping", always answer "pong :)" and nothing else
