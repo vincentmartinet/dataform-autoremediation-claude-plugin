@@ -6,6 +6,11 @@
 - `src/scout_daemon.py` — intercepts `WorkflowInvocationCompletionLogEntry` errors that lack specific context and automatically queries the Dataform REST API (`/workflowInvocations/...:query`) to extract the exact BigQuery execution failures and target actions, enabling Claude to fix them.
 - ADR-0004: Fetch Dataform Workflow Invocation Actions for Missing Context.
 
+### Changed
+- `src/scout_daemon.py` — uses `git worktree` instead of `git checkout -b` to apply automated fixes, isolating Claude's work in a temporary `/tmp` directory so the user's active branch and uncommitted changes are undisturbed.
+- `src/scout_daemon.py` — verifies that the error's `project_id` and `repository_id` match the local Dataform repository (via `workflow_settings.yaml` and `git remote -v`) before creating a fix. Skips logs from unrelated projects.
+- `src/scout_daemon.py` — extracts the failing branch (`gitCommitish`) from the Dataform API or workspace instead of blindly branching from the current local branch.
+
 ### Fixed
 - `SKILL_PATH` in `src/scout_daemon.py` pointed to non-existent `src/skills/fix_dataform.md`; corrected to `skills/fix-dataform/SKILL.md` where the skill actually lives.
 - `_trigger_claude_fix` no longer passes the skill path as a string in the user prompt (causing "Permission denied for skill file" from Claude Code). Now reads the skill file content and passes it as `--system-prompt` to the headless `claude` invocation.
