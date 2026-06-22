@@ -301,7 +301,15 @@ def _trigger_claude_fix(
 
     try:
         subprocess.run(
-            ["claude", "--system-prompt", system_prompt, "-p", prompt],
+            [
+                "claude",
+                "--system-prompt",
+                system_prompt,
+                "--permission-mode",
+                "auto",
+                "-p",
+                prompt,
+            ],
             text=True,
             timeout=120,
             cwd=wt_path,

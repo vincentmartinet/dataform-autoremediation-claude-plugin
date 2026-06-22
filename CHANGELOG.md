@@ -8,6 +8,7 @@
 
 ### Fixed
 - `src/scout_daemon.py` — resolved macOS `/tmp` symlink issue by using `os.path.realpath` for the clone path, which prevents Claude Code from rejecting file edits due to strict workspace boundary checks.
+- `src/scout_daemon.py` — added `--permission-mode auto` to the headless Claude invocation to ensure the agent doesn't block on tool permissions while editing `.sqlx` files or running shell commands in the temporary fix workspace.
 
 ---
 
