@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.1] - 2026-06-22
+
+### Fixed
+- Reinstated the use of `gh repo clone` instead of `git clone` in `src/git_ops.py` to seamlessly handle authentication for private GitHub repositories, which was accidentally reverted during the module refactoring.
+- Re-added the dependency check for `gh` in `src/scout_daemon.py`.
+
 ## [0.8.0] - 2026-06-22
 
 ### Added

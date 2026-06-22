@@ -25,7 +25,7 @@ def test_clone_and_checkout_success(mock_run: MagicMock) -> None:
 
     # 1. clone
     assert "clone" in calls[0][0][0]
-    assert calls[0][0][0][2] == "https://fake.url"
+    assert calls[0][0][0][3] == "https://fake.url"
 
     # 2. status
     assert "status" in calls[1][0][0]

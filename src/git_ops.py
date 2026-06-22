@@ -22,7 +22,7 @@ class GitOpsService:
         logger.info(f"Cloning {repo_url} into {clone_path}")
         try:
             subprocess.run(
-                ["git", "clone", repo_url, clone_path],
+                ["gh", "repo", "clone", repo_url, clone_path],
                 check=True,
                 capture_output=True,
                 text=True,

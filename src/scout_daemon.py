@@ -313,7 +313,7 @@ class ScoutDaemon:
     def check_dependencies(self) -> None:
         """Check if required external CLI tools are installed."""
         missing = []
-        for cmd in ["gcloud", "git", "dataform"]:
+        for cmd in ["gcloud", "git", "dataform", "gh"]:
             if shutil.which(cmd) is None:
                 missing.append(cmd)
         if missing:
