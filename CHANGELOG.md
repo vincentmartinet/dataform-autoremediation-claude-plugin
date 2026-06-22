@@ -2,6 +2,9 @@
 
 ## [0.8.1] - 2026-06-22
 
+### Added
+- ADR-0010: Documented the decision to use `gh repo clone` over `git clone` to avoid headless authentication failures.
+
 ### Fixed
 - Reinstated the use of `gh repo clone` instead of `git clone` in `src/git_ops.py` to seamlessly handle authentication for private GitHub repositories, which was accidentally reverted during the module refactoring.
 - Re-added the dependency check for `gh` in `src/scout_daemon.py`.

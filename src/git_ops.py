@@ -21,6 +21,8 @@ class GitOpsService:
 
         logger.info(f"Cloning {repo_url} into {clone_path}")
         try:
+            # ADR-0010: Use GitHub CLI (`gh`) instead of `git` to bypass
+            # interactive authentication prompts for headless private repo cloning.
             subprocess.run(
                 ["gh", "repo", "clone", repo_url, clone_path],
                 check=True,
