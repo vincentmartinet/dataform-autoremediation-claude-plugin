@@ -10,18 +10,17 @@ import re
 import signal
 import subprocess
 import sys
-import tempfile
 from datetime import datetime, timezone, timedelta
 
 
 GCLOUD = "gcloud"
 PID_FILE = "/tmp/dataform-scout.pid"
 CONFIG_FILE = os.path.expanduser("~/.config/dataform-scout/config")
-LOG_FILTER = 'resource.type="dataform.googleapis.com/Repository" AND severity=ERROR'
+LOG_FILTER = 'resource.type="dataform.googleapis.com/Repository" AND severity>=ERROR'
 PLUGIN_ROOT = os.environ.get(
     "CLAUDE_PLUGIN_ROOT", os.path.dirname(os.path.dirname(__file__))
 )
-SKILL_PATH = os.path.join(PLUGIN_ROOT, "src", "skills", "fix_dataform.md")
+SKILL_PATH = os.path.join(PLUGIN_ROOT, "skills", "fix-dataform", "SKILL.md")
 
 
 def _load_scope_flags() -> list[str]:
@@ -106,32 +105,34 @@ def _create_fix_branch() -> str:
 
 
 def _trigger_claude_fix(sqlx_path: str | None, error_msg: str, branch: str):
+    try:
+        with open(SKILL_PATH) as f:
+            system_prompt = f.read()
+    except OSError as exc:
+        print(f"[scout] Cannot read skill file {SKILL_PATH}: {exc}", file=sys.stderr)
+        return
+
     prompt_lines = [
-        f"Skill: {SKILL_PATH}",
-        "",
         f"Branch: {branch}",
         f"Error: {error_msg}",
     ]
     if sqlx_path:
-        prompt_lines.insert(2, f"File: {sqlx_path}")
+        prompt_lines.insert(0, f"File: {sqlx_path}")
 
     prompt = "\n".join(prompt_lines)
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-        f.write(prompt)
-        prompt_file = f.name
-
     try:
-        subprocess.run(["claude", "-p", prompt], input=prompt, text=True)
-    except FileNotFoundError:
-        print(
-            "[scout] WARNING: `claude` CLI not found. Prompt written to:", prompt_file
+        subprocess.run(
+            ["claude", "--system-prompt", system_prompt, "-p", prompt],
+            text=True,
+            timeout=120,
         )
-    finally:
-        try:
-            os.unlink(prompt_file)
-        except OSError:
-            pass
+    except FileNotFoundError:
+        print("[scout] WARNING: `claude` CLI not found.", file=sys.stderr)
+    except subprocess.TimeoutExpired:
+        print(
+            "[scout] WARNING: claude fix attempt timed out after 120s.", file=sys.stderr
+        )
 
 
 def _handle_entry(entry: dict):
