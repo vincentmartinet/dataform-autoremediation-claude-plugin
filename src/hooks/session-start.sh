@@ -4,6 +4,11 @@ set -euo pipefail
 PID_FILE="/tmp/dataform-scout.pid"
 CONFIG_FILE="${HOME}/.config/dataform-scout/config"
 
+if ! command -v python3 &> /dev/null; then
+  printf '{"systemMessage": "Dataform Scout requires Python 3 to be installed. Please install Python 3 and try again."}\n'
+  exit 0
+fi
+
 # Already running — nothing to do
 if [ -f "$PID_FILE" ]; then
   pid=$(cat "$PID_FILE")
