@@ -6,6 +6,9 @@
 - `src/scout_daemon.py` — uses the `gh repo clone` command instead of `git clone` to seamlessly handle authentication for GitHub repositories.
 - `src/scout_daemon.py` — added a startup dependency check for `gcloud`, `git`, `dataform`, and `gh` executables before running the main loop.
 
+### Fixed
+- `src/scout_daemon.py` — resolved macOS `/tmp` symlink issue by using `os.path.realpath` for the clone path, which prevents Claude Code from rejecting file edits due to strict workspace boundary checks.
+
 ---
 
 ## [0.5.1] - 2026-06-22

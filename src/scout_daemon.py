@@ -247,7 +247,7 @@ def _fetch_workflow_branch(
 
 def _clone_and_checkout(repo_url: str, branch: str | None) -> tuple[str, str]:
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    clone_path = f"/tmp/dataform-scout-{ts}"
+    clone_path = os.path.realpath(f"/tmp/dataform-scout-{ts}")
     fix_branch = f"fix/dataform-{ts}"
 
     subprocess.run(
