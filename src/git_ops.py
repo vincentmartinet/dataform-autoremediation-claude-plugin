@@ -1,3 +1,4 @@
+"""Git operations module."""
 import logging
 import os
 import subprocess
@@ -9,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def clone_and_checkout(repo_url: str, branch: str | None) -> tuple[str, str]:
+    """Clone a Git repository and checkout a specific branch."""
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     clone_path = os.path.realpath(f"/tmp/dataform-scout-{ts}")
     fix_branch = f"fix/dataform-{ts}"

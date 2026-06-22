@@ -1,3 +1,4 @@
+"""Constants used throughout the Dataform Scout daemon."""
 import os
 
 GCLOUD = "gcloud"

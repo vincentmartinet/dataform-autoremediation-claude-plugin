@@ -1,3 +1,4 @@
+"""Module for invoking headless Claude Code logic."""
 import logging
 import subprocess
 
@@ -14,6 +15,7 @@ def trigger_claude_fix(
     branch: str,
     wt_path: str,
 ) -> None:
+    """Triggers a headless Claude Code session to apply automated fixes."""
     try:
         with open(SKILL_PATH) as f:
             system_prompt = f.read()

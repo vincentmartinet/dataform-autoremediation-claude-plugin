@@ -292,6 +292,7 @@ def _stream() -> None:
 
 
 def check_dependencies() -> None:
+    """Check if required external CLI tools are installed."""
     missing = []
     # Removed 'gh' per user rules (should only check gcloud, git, dataform)
     for cmd in ["gcloud", "git", "dataform"]:

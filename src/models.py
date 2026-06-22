@@ -1,13 +1,16 @@
+"""Data models for log entries and payload."""
 from dataclasses import dataclass, field
 from typing import Any
 
 
 @dataclass
 class ActionTarget:
+    """Action target from log payload."""
     name: str = ""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ActionTarget":
+        """Create ActionTarget from dictionary."""
         if not isinstance(data, dict):
             return cls()
         return cls(name=data.get("name", ""))
@@ -15,6 +18,7 @@ class ActionTarget:
 
 @dataclass
 class Payload:
+    """Payload structure from log entry."""
     message: str = ""
     error: str = ""
     type_str: str = ""
@@ -25,6 +29,7 @@ class Payload:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "Payload":
+        """Create Payload from dictionary."""
         if not data or not isinstance(data, dict):
             return cls()
 
@@ -44,11 +49,13 @@ class Payload:
 
 @dataclass
 class ResourceLabels:
+    """Labels from log resource."""
     location: str = ""
     repository_id: str = ""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ResourceLabels":
+        """Create ResourceLabels from dictionary."""
         if not isinstance(data, dict):
             return cls()
         return cls(
@@ -59,10 +66,12 @@ class ResourceLabels:
 
 @dataclass
 class Resource:
+    """Resource structure from log entry."""
     labels: ResourceLabels = field(default_factory=ResourceLabels)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Resource":
+        """Create Resource from dictionary."""
         if not isinstance(data, dict):
             return cls()
         return cls(labels=ResourceLabels.from_dict(data.get("labels", {})))
@@ -70,11 +79,13 @@ class Resource:
 
 @dataclass
 class LogEntryLabels:
+    """Labels from log entry."""
     action_name: str = ""
     workspace_id: str = ""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "LogEntryLabels":
+        """Create LogEntryLabels from dictionary."""
         if not isinstance(data, dict):
             return cls()
         return cls(
@@ -85,6 +96,7 @@ class LogEntryLabels:
 
 @dataclass
 class LogEntry:
+    """Top-level Google Cloud logging entry."""
     text_payload: str = ""
     payload: Payload = field(default_factory=Payload)
     labels: LogEntryLabels = field(default_factory=LogEntryLabels)
@@ -93,6 +105,7 @@ class LogEntry:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "LogEntry":
+        """Create LogEntry from dictionary."""
         raw_json = data.get("jsonPayload")
         raw_proto = data.get("protoPayload")
 
@@ -113,6 +126,7 @@ class LogEntry:
 
     @property
     def project_id(self) -> str:
+        """Extract project ID from log name."""
         if self.log_name.startswith("projects/"):
             parts = self.log_name.split("/")
             if len(parts) >= 2:

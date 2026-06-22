@@ -1,3 +1,4 @@
+"""GCP API operations module."""
 import json
 import logging
 import subprocess
@@ -54,6 +55,7 @@ def _make_request(url: str) -> dict[str, Any]:
 
 
 def get_gcp_repo_url(project_id: str, location: str, repository_id: str) -> str | None:
+    """Fetch the Git remote URL for a Dataform repository via the GCP API."""
     url = f"https://dataform.googleapis.com/v1/projects/{project_id}/locations/{location}/repositories/{repository_id}"
     try:
         data = _make_request(url)
@@ -68,6 +70,7 @@ def get_gcp_repo_url(project_id: str, location: str, repository_id: str) -> str 
 def fetch_workflow_branch(
     project_id: str, location: str, repository_id: str, invocation_id: str
 ) -> str | None:
+    """Fetch the Git branch name (commitish) for a specific workflow invocation."""
     url = f"https://dataform.googleapis.com/v1/projects/{project_id}/locations/{location}/repositories/{repository_id}/workflowInvocations/{invocation_id}"
     try:
         data = _make_request(url)
@@ -90,6 +93,7 @@ def fetch_workflow_branch(
 def fetch_workflow_failed_actions(
     project_id: str, location: str, repository_id: str, invocation_id: str
 ) -> list[dict[str, Any]]:
+    """Fetch the list of failed actions for a specific workflow invocation."""
     url = f"https://dataform.googleapis.com/v1/projects/{project_id}/locations/{location}/repositories/{repository_id}/workflowInvocations/{invocation_id}:query"
     try:
         data = _make_request(url)

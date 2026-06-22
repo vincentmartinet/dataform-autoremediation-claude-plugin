@@ -1,3 +1,4 @@
+"""Notifications module for sending macOS system alerts."""
 import logging
 import subprocess
 
@@ -5,6 +6,7 @@ logger = logging.getLogger(__name__)
 
 
 def notify(title: str, message: str, subtitle: str = "", sound: str = "Basso") -> None:
+    """Sends a system notification via macOS osascript."""
     safe_title = title.replace('"', "'")
     safe_message = message.replace('"', "'")
     safe_subtitle = subtitle.replace('"', "'")
