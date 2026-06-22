@@ -33,6 +33,18 @@ class GitOpsService:
             logger.error(f"Failed to clone repo: {exc.stderr}")
             raise GitOpsError(f"Clone failed: {exc.stderr}") from exc
 
+        logger.info("Configuring local git credential helper...")
+        try:
+            subprocess.run(
+                ["git", "config", "credential.helper", "!gh auth git-credential"],
+                cwd=clone_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            logger.warning(f"Failed to configure git credential helper: {exc.stderr}")
+
         status = subprocess.run(
             ["git", "status", "--porcelain"],
             cwd=clone_path,

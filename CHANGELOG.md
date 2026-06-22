@@ -7,6 +7,7 @@
 - ADR-0010: Documented the decision to use `gh repo clone` over `git clone` to avoid headless authentication failures.
 
 ### Fixed
+- Fixed an issue where `git push` failed with a headless authentication error during Pull Request creation by configuring `!gh auth git-credential` as the local credential helper immediately after cloning.
 - Reinstated the use of `gh repo clone` instead of `git clone` in `src/git_ops.py` to seamlessly handle authentication for private GitHub repositories, which was accidentally reverted during the module refactoring.
 - Re-added the dependency check for `gh` in `src/scout_daemon.py`.
 
