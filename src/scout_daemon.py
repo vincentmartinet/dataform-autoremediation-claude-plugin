@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""
-Dataform Scout Daemon — monitors GCP Dataform error logs and triggers Claude Code fixes.
+"""Dataform Scout Daemon.
+
+Monitors GCP Dataform error logs and triggers Claude Code fixes.
 Relies entirely on the active `gcloud` configuration. Never pushes to remote.
 """
 
@@ -44,6 +45,7 @@ class ScoutDaemon:
         notification_service: NotificationService,
         error_classifier: ErrorClassifier,
     ):
+        """Initialize the ScoutDaemon."""
         self.gcp_client = gcp_client
         self.git_ops = git_ops
         self.invoker = invoker

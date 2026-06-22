@@ -18,6 +18,7 @@ class GCPApiClient:
     """Client for interacting with GCP APIs."""
 
     def __init__(self) -> None:
+        """Initialize the GCPApiClient."""
         self._token_cache: str | None = None
         self._token_expiry: datetime | None = None
 

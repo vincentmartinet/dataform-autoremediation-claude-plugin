@@ -13,6 +13,7 @@ class ClaudeInvokerService:
     """Service for invoking headless Claude Code logic."""
 
     def __init__(self, notification_service: NotificationService):
+        """Initialize the ClaudeInvokerService."""
         self.notification_service = notification_service
 
     def trigger_claude_fix(

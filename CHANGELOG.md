@@ -2,6 +2,10 @@
 
 ## [0.8.0] - 2026-06-22
 
+### Added
+- Configured Ruff to enforce `pydocstyle` (`D` rules) with the Google convention for strict docstring requirements.
+- Added missing docstrings and fixed docstring formatting across the `src/` directory to comply with the new rules.
+
 ### Changed
 - `src/scout_daemon.py` & services - Refactored the core application into an Object-Oriented/Inversion of Control (IoC) architecture using Dependency Injection for all services (`GCPApiClient`, `GitOpsService`, `ErrorClassifier`, `ClaudeInvokerService`, `NotificationService`).
 - Updated `tests/` to use manual injection of mocked classes instead of `unittest.mock.patch`.
