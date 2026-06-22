@@ -5,7 +5,7 @@ import os
 import subprocess
 from datetime import datetime
 
-from src.exceptions import GitOpsError
+from .exceptions import GitOpsError
 
 logger = logging.getLogger(__name__)
 

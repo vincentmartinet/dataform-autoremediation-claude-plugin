@@ -8,8 +8,8 @@ import urllib.request
 from datetime import datetime, timedelta
 from typing import Any
 
-from src.constants import GCLOUD
-from src.exceptions import GCPAPIError
+from .constants import GCLOUD
+from .exceptions import GCPAPIError
 
 logger = logging.getLogger(__name__)
 

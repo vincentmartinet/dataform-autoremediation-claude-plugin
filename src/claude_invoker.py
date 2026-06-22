@@ -3,8 +3,8 @@
 import logging
 import subprocess
 
-from src.constants import MAX_FIX_ATTEMPTS, SKILL_PATH
-from src.notifications import NotificationService
+from .constants import MAX_FIX_ATTEMPTS, SKILL_PATH
+from .notifications import NotificationService
 
 logger = logging.getLogger(__name__)
 
