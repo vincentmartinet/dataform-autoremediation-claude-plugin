@@ -1,4 +1,5 @@
 ---
+name: scout-configure
 description: Interactively configure the GCP log scope (project, folder, or organization) for the dataform-scout daemon. Use when the user runs /scout-configure, wants to set up or change which GCP resource the scout watches, or when the daemon reports it is not configured.
 ---
 
