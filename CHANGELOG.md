@@ -5,7 +5,7 @@
 ### Added
 - Comprehensive test suite covering core modules (`tests/test_models.py`, `tests/test_error_classification.py`, `tests/test_gcp_api.py`, `tests/test_git_ops.py`, `tests/test_scout_daemon.py`) using `pytest` and `unittest.mock`.
 - Static typing checks using `mypy` and configured strict typing rules.
-- Pre-commit configuration (`.pre-commit-config.yaml`) containing `ruff` (formatting and linting), `mypy`, and `pytest` to prevent malformed code submissions.
+- Pre-commit configuration (`.pre-commit-config.yaml`) containing `ruff` (formatting and linting), `mypy`, `pylint`, and `pytest` to prevent malformed code submissions.
 
 ## [0.6.0] - 2026-06-22
 

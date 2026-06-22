@@ -90,6 +90,7 @@ uv run ruff format .
 
 # Lint code
 uv run ruff check .
+uv run pylint src/ tests/
 
 # Type checking
 uv run mypy src/ tests/
