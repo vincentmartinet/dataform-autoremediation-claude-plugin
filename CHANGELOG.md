@@ -3,6 +3,7 @@
 ## [0.8.1] - 2026-06-22
 
 ### Added
+- Added an interactive macOS dialog that prompts the user for confirmation after a successful fix. If confirmed, the daemon autonomously pushes the fix branch and opens a Pull Request using `gh pr create`.
 - ADR-0010: Documented the decision to use `gh repo clone` over `git clone` to avoid headless authentication failures.
 
 ### Fixed

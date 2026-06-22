@@ -333,7 +333,7 @@ if __name__ == "__main__":
         notification_service = NotificationService()
         gcp_client = GCPApiClient()
         git_ops = GitOpsService()
-        invoker = ClaudeInvokerService(notification_service)
+        invoker = ClaudeInvokerService(notification_service, git_ops)
         error_classifier = ErrorClassifier()
 
         daemon = ScoutDaemon(

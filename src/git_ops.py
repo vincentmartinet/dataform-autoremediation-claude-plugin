@@ -73,3 +73,28 @@ class GitOpsService:
             raise GitOpsError(f"Branch creation failed: {exc.stderr}") from exc
 
         return fix_branch, clone_path
+
+    def push_and_create_pr(
+        self, branch: str, wt_path: str, title: str, body: str
+    ) -> None:
+        """Push a local branch to the remote and open a Pull Request via gh."""
+        logger.info(f"Pushing branch {branch} and creating PR.")
+        try:
+            subprocess.run(
+                ["git", "push", "--set-upstream", "origin", branch],
+                cwd=wt_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["gh", "pr", "create", "--title", title, "--body", body],
+                cwd=wt_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            logger.info("Successfully pushed and created PR.")
+        except subprocess.CalledProcessError as exc:
+            logger.error(f"Failed to push or create PR: {exc.stderr}")
+            raise GitOpsError(f"Failed to push or create PR: {exc.stderr}") from exc

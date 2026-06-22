@@ -34,3 +34,21 @@ class NotificationService:
             )
         except Exception as exc:
             logger.warning(f"Unexpected error while sending OS notification: {exc}")
+
+    def ask_confirmation(self, title: str, prompt: str) -> bool:
+        """Asks the user for confirmation via macOS dialog."""
+        safe_title = title.replace('"', "'")
+        safe_prompt = prompt.replace('"', "'")
+        script = (
+            f'display dialog "{safe_prompt}" '
+            f'with title "{safe_title}" '
+            'buttons {"Yes", "No"} default button "Yes"'
+        )
+        try:
+            res = subprocess.run(
+                ["/usr/bin/osascript", "-e", script], capture_output=True, text=True
+            )
+            return "button returned:Yes" in res.stdout
+        except Exception as exc:
+            logger.warning(f"Failed to ask confirmation: {exc}")
+            return False

@@ -33,7 +33,7 @@ You must strictly follow these constraints when writing, modifying, or testing c
 
 ### 3. Git Protection
 - Run `git status --porcelain` before checking out a branch. Abort if the working directory is dirty.
-- **Strict Prohibition:** Never write or execute commands that perform `git push`, `git merge`, or any remote-destructive operations. The agent boundary ends at a local branch.
+- **Strict Prohibition:** Never autonomously write or execute commands that perform `git push`, `git merge`, or any remote-destructive operations. The agent boundary ends at a local branch unless the plugin explicitly prompts the user for interactive confirmation via a dialog box. Upon explicit user approval, the plugin may push the branch and open a Pull Request.
 - Maintain an in-memory cache of recently failed files to ignore duplicate error streams within a 5-minute window.
 
 ---
