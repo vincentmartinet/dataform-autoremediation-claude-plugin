@@ -270,7 +270,9 @@ class ScoutDaemon:
             logger.error(f"Error handling entry: {e}", exc_info=True)
 
     def _lookback(self) -> None:
-        since = (datetime.now(UTC) - timedelta(seconds=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        since = (datetime.now(UTC) - timedelta(seconds=24)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
         full_filter = f'{LOG_FILTER} AND timestamp>="{since}"'
         logger.info("Running 24-hour lookback…")
 
@@ -309,16 +311,13 @@ class ScoutDaemon:
 
         cmd = [
             GCLOUD,
-            "alpha",
+            "beta",
             "logging",
             "tail",
             LOG_FILTER,
             "--format=json",
         ] + self.scope_flags
         env = os.environ.copy()
-        env["PYTHONUNBUFFERED"] = "1"
-        env["CLOUDSDK_PYTHON_SITEPACKAGES"] = "1"
-        env["CLOUDSDK_PYTHON"] = sys.executable
 
         try:
             self._tail_proc = subprocess.Popen(
@@ -344,9 +343,21 @@ class ScoutDaemon:
             return
 
         for line in self._tail_proc.stdout:
+            line_stripped = line.strip()
+            # gcloud tail --format=json outputs an infinite JSON array.
+            # Ignore the opening and closing brackets of the array.
+            if line_stripped in ("[", "]"):
+                continue
+
             buffer += line
             try:
-                entry = json.loads(buffer)
+                # The objects are comma-separated in the stream (e.g. `},\n`).
+                # Strip trailing whitespace and the comma to parse the object.
+                content_to_parse = buffer.rstrip().rstrip(",")
+                if not content_to_parse:
+                    continue
+
+                entry = json.loads(content_to_parse)
                 buffer = ""
                 if isinstance(entry, dict):
                     self._handle_entry(entry)
