@@ -105,6 +105,28 @@ class GitOpsService:
         """Push a local branch to the remote and open a Pull Request via gh."""
         logger.info(f"Pushing branch {branch} and creating PR.")
         try:
+            status = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=wt_path,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            if status.stdout.strip():
+                logger.info("Committing modified files...")
+                subprocess.run(
+                    ["git", "add", "."],
+                    cwd=wt_path,
+                    check=True,
+                    capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "commit", "-m", title],
+                    cwd=wt_path,
+                    check=True,
+                    capture_output=True,
+                )
+
             subprocess.run(
                 ["git", "push", "--set-upstream", "origin", branch],
                 cwd=wt_path,
