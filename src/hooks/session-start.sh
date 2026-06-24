@@ -9,6 +9,11 @@ if ! command -v python3 &> /dev/null; then
   exit 0
 fi
 
+if ! python3 -c "import grpc" &> /dev/null; then
+  printf '{"systemMessage": "Dataform Scout requires the python grpcio package for gcloud live tailing. Please install it (e.g., `sudo pip3 install grpcio`) and try again."}\n'
+  exit 0
+fi
+
 # Already running — nothing to do
 if [ -f "$PID_FILE" ]; then
   pid=$(cat "$PID_FILE")
