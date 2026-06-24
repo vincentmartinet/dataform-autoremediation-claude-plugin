@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.3] - 2026-06-24
+
+### Fixed
+- Fixed an issue where the real-time log watcher would ignore new errors after startup because of standard output buffering when piping `gcloud alpha logging tail`. Set `PYTHONUNBUFFERED=1` to force immediate line-by-line flushing.
+- Fixed an issue where missing Python docstrings and long lines caused linting errors by adding docstrings, fixing line lengths, and configuring PyProject linting rules.
+
 ## [0.8.2] - 2026-06-24
 
 ### Added

@@ -223,7 +223,8 @@ class ScoutDaemon:
                         now = datetime.now()
                         if cache_key in self._recent_failures:
                             logger.info(
-                                f"Skipping recently failed action '{action_name}' due to cache."
+                                "Skipping recently failed action "
+                                f"'{action_name}' due to cache."
                             )
                             continue
                         self._recent_failures[cache_key] = now
@@ -248,7 +249,8 @@ class ScoutDaemon:
             now = datetime.now()
             if cache_key in self._recent_failures:
                 logger.info(
-                    f"Skipping recently failed target '{sqlx_path or action_name}' due to cache."
+                    "Skipping recently failed target "
+                    f"'{sqlx_path or action_name}' due to cache."
                 )
                 return
             self._recent_failures[cache_key] = now
@@ -306,11 +308,14 @@ class ScoutDaemon:
             LOG_FILTER,
             "--format=json",
         ] + self.scope_flags
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+
         self._tail_proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
             text=True,
+            env=env,
         )
 
         buffer = ""
