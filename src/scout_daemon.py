@@ -14,6 +14,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -297,6 +298,12 @@ class ScoutDaemon:
             if isinstance(entry, dict):
                 self._handle_entry(entry)
 
+    def _log_stderr_stream(self, pipe: Any) -> None:
+        for line in pipe:
+            line_stripped = line.strip()
+            if line_stripped:
+                logger.error(f"gcloud tail: {line_stripped}")
+
     def _stream(self) -> None:
         logger.info("Starting real-time log stream (Ctrl-C to stop)…")
 
@@ -315,12 +322,20 @@ class ScoutDaemon:
             self._tail_proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 env=env,
             )
         except Exception as e:
             logger.error(f"Failed to start log stream process: {e}")
             return
+
+        if self._tail_proc.stderr:
+            stderr_thread = threading.Thread(
+                target=self._log_stderr_stream, args=(self._tail_proc.stderr,)
+            )
+            stderr_thread.daemon = True
+            stderr_thread.start()
 
         buffer = ""
         if self._tail_proc.stdout is None:
@@ -335,6 +350,12 @@ class ScoutDaemon:
                     self._handle_entry(entry)
             except json.JSONDecodeError:
                 pass
+
+        self._tail_proc.wait()
+        if self._tail_proc.returncode != 0:
+            logger.error(
+                f"Log stream process exited with code {self._tail_proc.returncode}"
+            )
 
     def check_dependencies(self) -> None:
         """Check if required external CLI tools are installed."""
