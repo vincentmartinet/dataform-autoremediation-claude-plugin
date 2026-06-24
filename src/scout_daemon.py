@@ -317,6 +317,7 @@ class ScoutDaemon:
         ] + self.scope_flags
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+        env["CLOUDSDK_PYTHON_SITEPACKAGES"] = "1"
 
         try:
             self._tail_proc = subprocess.Popen(

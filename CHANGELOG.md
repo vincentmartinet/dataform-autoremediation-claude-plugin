@@ -5,6 +5,7 @@
 ### Fixed
 - Added a try-except block around `subprocess.Popen` when starting the `gcloud alpha logging tail` process to prevent the daemon from crashing if the process fails to spawn due to OS errors.
 - Spawns a background thread to capture and log any error messages output to `stderr` by `gcloud alpha logging tail` if the command fails during runtime.
+- Configured the daemon to set `CLOUDSDK_PYTHON_SITEPACKAGES=1` in the gcloud subprocess environment to ensure `gcloud alpha logging tail` has access to the user's system `grpcio` package required for live tailing.
 - Fixed an issue where the real-time log watcher would ignore new errors after startup because of standard output buffering when piping `gcloud alpha logging tail`. Set `PYTHONUNBUFFERED=1` to force immediate line-by-line flushing.
 - Fixed an issue where missing Python docstrings and long lines caused linting errors by adding docstrings, fixing line lengths, and configuring PyProject linting rules.
 
