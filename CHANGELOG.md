@@ -3,6 +3,7 @@
 ## [0.8.2] - 2026-06-24
 
 ### Added
+- Log all Git configuration (email, gpgkey, etc.) whenever the daemon handles an error.
 - Added explicit logging when failed actions are empty or when duplicate failures are skipped by the cache to improve observability in `src/scout_daemon.py`.
 - Added a new `clear-cache` option to the `/scout-configure` command (and skill) that triggers a `SIGUSR1` signal to the daemon, allowing users to manually clear the in-memory deduplication cache without restarting the service.
 

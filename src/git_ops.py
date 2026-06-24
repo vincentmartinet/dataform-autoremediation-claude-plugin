@@ -13,6 +13,19 @@ logger = logging.getLogger(__name__)
 class GitOpsService:
     """Service for Git operations."""
 
+    def log_git_config(self) -> None:
+        """Log all Git configuration."""
+        try:
+            result = subprocess.run(
+                ["git", "config", "--list"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            logger.info(f"Git configuration:\n{result.stdout.strip()}")
+        except subprocess.CalledProcessError as exc:
+            logger.warning(f"Failed to retrieve git config: {exc.stderr}")
+
     def clone_and_checkout(self, repo_url: str, branch: str | None) -> tuple[str, str]:
         """Clone a Git repository and checkout a specific branch."""
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
