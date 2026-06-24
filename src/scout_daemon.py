@@ -270,9 +270,7 @@ class ScoutDaemon:
             logger.error(f"Error handling entry: {e}", exc_info=True)
 
     def _lookback(self) -> None:
-        since = (datetime.now(UTC) - timedelta(seconds=24)).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )
+        since = (datetime.now(UTC) - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
         full_filter = f'{LOG_FILTER} AND timestamp>="{since}"'
         logger.info("Running 24-hour lookback…")
 
@@ -356,6 +354,9 @@ class ScoutDaemon:
                 content_to_parse = buffer.rstrip().rstrip(",")
                 if not content_to_parse:
                     continue
+
+                # Debug logging to see exactly what we are parsing
+                logger.info(f"Parsing JSON: {content_to_parse[:200]}...")
 
                 entry = json.loads(content_to_parse)
                 buffer = ""
