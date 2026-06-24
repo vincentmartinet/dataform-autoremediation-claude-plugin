@@ -14,13 +14,7 @@ if ! python3 -c "import grpc" &> /dev/null; then
   exit 0
 fi
 
-# Already running — nothing to do
-if [ -f "$PID_FILE" ]; then
-  pid=$(cat "$PID_FILE")
-  if kill -0 "$pid" 2>/dev/null; then
-    exit 0
-  fi
-fi
+
 
 # No config yet — ask Claude to run /scout-configure before starting
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -48,6 +42,15 @@ case "$scope_type" in
     exit 0
     ;;
 esac
+
+# Already running — print status and exit
+if [ -f "$PID_FILE" ]; then
+  pid=$(cat "$PID_FILE")
+  if kill -0 "$pid" 2>/dev/null; then
+    printf '{"systemMessage": "Dataform Scout daemon is already running — listening to %s logs (%s)."}\n' "$scope_type" "$scope_id"
+    exit 0
+  fi
+fi
 
 cd "${CLAUDE_PLUGIN_ROOT}"
 nohup python3 -m src.scout_daemon \
