@@ -311,12 +311,16 @@ class ScoutDaemon:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
 
-        self._tail_proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            text=True,
-            env=env,
-        )
+        try:
+            self._tail_proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                text=True,
+                env=env,
+            )
+        except Exception as e:
+            logger.error(f"Failed to start log stream process: {e}")
+            return
 
         buffer = ""
         if self._tail_proc.stdout is None:
