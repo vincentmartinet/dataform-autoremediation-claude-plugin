@@ -1,11 +1,16 @@
 ---
 name: scout-configure
-description: Interactively configure the GCP log scope (project, folder, or organization) for the dataform-scout daemon. Use when the user runs /scout-configure, wants to set up or change which GCP resource the scout watches, or when the daemon reports it is not configured.
+description: Interactively configure the GCP log scope (project, folder, or organization) for the dataform-scout daemon, or clear its deduplication cache. Use when the user runs /scout-configure, wants to set up or change which GCP resource the scout watches, when the daemon reports it is not configured, or to clear the cache.
 ---
 
 # Skill: scout-configure
 
 Configure the Dataform Scout log scope by collecting the resource type and ID from the user, then writing the config file.
+
+## Clearing the cache
+
+If `$ARGUMENTS` contains `clear-cache`:
+Run `kill -USR1 $(cat /tmp/dataform-scout.pid)` to instruct the running daemon to clear its in-memory deduplication cache. Reply to the user confirming that the cache has been cleared, and stop execution (do not collect configuration).
 
 ## Collecting input
 

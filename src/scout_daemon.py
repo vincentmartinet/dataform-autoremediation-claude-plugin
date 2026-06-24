@@ -58,6 +58,11 @@ class ScoutDaemon:
 
         signal.signal(signal.SIGINT, self._graceful_exit)
         signal.signal(signal.SIGTERM, self._graceful_exit)
+        signal.signal(signal.SIGUSR1, self._clear_all_cache)
+
+    def _clear_all_cache(self, signum: Any, frame: Any) -> None:
+        logger.info("Clearing deduplication cache upon user request...")
+        self._recent_failures.clear()
 
     def _clean_cache(self) -> None:
         now = datetime.now()

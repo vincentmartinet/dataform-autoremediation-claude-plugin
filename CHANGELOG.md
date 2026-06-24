@@ -4,6 +4,7 @@
 
 ### Added
 - Added explicit logging when failed actions are empty or when duplicate failures are skipped by the cache to improve observability in `src/scout_daemon.py`.
+- Added a new `clear-cache` option to the `/scout-configure` command (and skill) that triggers a `SIGUSR1` signal to the daemon, allowing users to manually clear the in-memory deduplication cache without restarting the service.
 
 ## [0.8.1] - 2026-06-22
 
