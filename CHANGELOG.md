@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.8.2] - 2026-06-24
+
+### Added
+- Added explicit logging when failed actions are empty or when duplicate failures are skipped by the cache to improve observability in `src/scout_daemon.py`.
+
 ## [0.8.1] - 2026-06-22
 
 ### Added

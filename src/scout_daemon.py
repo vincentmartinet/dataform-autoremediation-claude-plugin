@@ -200,6 +200,8 @@ class ScoutDaemon:
                     branch = self.gcp_client.fetch_workflow_branch(
                         project_id, location, repository_id, invocation_id
                     )
+                    if not failed_actions:
+                        logger.info(f"No failed actions found for invocation {invocation_id}.")
                     for action in failed_actions:
                         target = action.get("target", {})
                         if isinstance(target, dict):
@@ -211,6 +213,7 @@ class ScoutDaemon:
                         cache_key = f"{project_id}:{repository_id}:{action_name}"
                         now = datetime.now()
                         if cache_key in self._recent_failures:
+                            logger.info(f"Skipping recently failed action '{action_name}' due to cache.")
                             continue
                         self._recent_failures[cache_key] = now
 
@@ -233,6 +236,7 @@ class ScoutDaemon:
             cache_key = f"{project_id}:{repository_id}:{sqlx_path or action_name}"
             now = datetime.now()
             if cache_key in self._recent_failures:
+                logger.info(f"Skipping recently failed target '{sqlx_path or action_name}' due to cache.")
                 return
             self._recent_failures[cache_key] = now
 
