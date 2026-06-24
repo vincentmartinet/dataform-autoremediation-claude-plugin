@@ -8,6 +8,7 @@
 - Added a check in `src/hooks/session-start.sh` to verify if the `grpcio` package is installed and emits a `systemMessage` to alert the user if missing, ensuring `gcloud alpha logging tail` works out of the box.
 - Configured the daemon to set `CLOUDSDK_PYTHON=sys.executable` and `CLOUDSDK_PYTHON_SITEPACKAGES=1` in the gcloud subprocess environment. This forces `gcloud alpha logging tail` to use the same Python interpreter as the daemon, ensuring it has access to the user's `grpcio` package required for live tailing without mismatch errors.
 - Fixed a bug where `json.loads` would constantly fail on the `gcloud alpha logging tail --format=json` stream output because it prints a continuous comma-separated JSON array. The daemon now strips trailing commas and ignores array brackets, properly parsing each log entry.
+- Fixed a bug where log entries were ignored by the daemon because `gcloud alpha logging tail` outputs `snake_case` keys (e.g. `json_payload`) while `gcloud logging read` outputs `camelCase` keys (e.g. `jsonPayload`). `models.py` now supports both formats.
 - Fixed an issue where the real-time log watcher would ignore new errors after startup because of standard output buffering when piping `gcloud alpha logging tail`. Set `PYTHONUNBUFFERED=1` to force immediate line-by-line flushing.
 - Fixed an issue where missing Python docstrings and long lines caused linting errors by adding docstrings, fixing line lengths, and configuring PyProject linting rules.
 

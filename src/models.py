@@ -36,15 +36,16 @@ class Payload:
         if not data or not isinstance(data, dict):
             return cls()
 
-        target_data = data.get("actionTarget")
+        target_data = data.get("actionTarget") or data.get("action_target")
         target = ActionTarget.from_dict(target_data) if target_data else None
 
         return cls(
             message=data.get("message", ""),
             error=data.get("error", ""),
             type_str=data.get("@type", ""),
-            terminal_state=data.get("terminalState", ""),
-            workflow_invocation_id=data.get("workflowInvocationId", ""),
+            terminal_state=data.get("terminalState") or data.get("terminal_state", ""),
+            workflow_invocation_id=data.get("workflowInvocationId")
+            or data.get("workflow_invocation_id", ""),
             action_target=target,
             raw_data=data,
         )
@@ -114,8 +115,8 @@ class LogEntry:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "LogEntry":
         """Create LogEntry from dictionary."""
-        raw_json = data.get("jsonPayload")
-        raw_proto = data.get("protoPayload")
+        raw_json = data.get("jsonPayload") or data.get("json_payload")
+        raw_proto = data.get("protoPayload") or data.get("proto_payload")
 
         # Use jsonPayload if available, else protoPayload, else empty
         payload_data = (
@@ -125,11 +126,11 @@ class LogEntry:
         )
 
         return cls(
-            text_payload=data.get("textPayload", ""),
+            text_payload=data.get("textPayload") or data.get("text_payload", ""),
             payload=Payload.from_dict(payload_data),
             labels=LogEntryLabels.from_dict(data.get("labels", {})),
             resource=Resource.from_dict(data.get("resource", {})),
-            log_name=data.get("logName", ""),
+            log_name=data.get("logName") or data.get("log_name", ""),
             timestamp=data.get("timestamp", ""),
         )
 
