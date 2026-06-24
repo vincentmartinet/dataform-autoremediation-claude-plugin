@@ -270,7 +270,7 @@ class ScoutDaemon:
             logger.error(f"Error handling entry: {e}", exc_info=True)
 
     def _lookback(self) -> None:
-        since = (datetime.now(UTC) - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        since = (datetime.now(UTC) - timedelta(seconds=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
         full_filter = f'{LOG_FILTER} AND timestamp>="{since}"'
         logger.info("Running 24-hour lookback…")
 
@@ -318,6 +318,7 @@ class ScoutDaemon:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["CLOUDSDK_PYTHON_SITEPACKAGES"] = "1"
+        env["CLOUDSDK_PYTHON"] = sys.executable
 
         try:
             self._tail_proc = subprocess.Popen(
