@@ -64,7 +64,6 @@ sequenceDiagram
                     Git-->>Daemon: PR Created
                     Daemon->>User: Notify PR Created
                 end
-                break
             else Compilation Failed
                 Daemon->>Claude: Retry with new compilation error
             end
