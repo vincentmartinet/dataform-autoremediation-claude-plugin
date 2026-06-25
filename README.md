@@ -48,7 +48,7 @@ You can also manually edit this config file to add `workspace_base_dir=/path/to/
 
 ## Usage
 
-The scout daemon starts **automatically** when Claude Code launches (via the `SessionStart` hook), as long as a config exists. No manual command needed.
+The scout daemon starts **automatically** when Claude Code launches (via the `SessionStart` hook), as long as a config exists. It acts as a shared background service (1:N architecture) that supports multiple concurrent Claude Code sessions in the same workspace. The daemon gracefully shuts itself down when the last active Claude session ends.
 
 For each error detected, the plugin will:
 - Deduplicate identical errors within a 5-minute rolling window.

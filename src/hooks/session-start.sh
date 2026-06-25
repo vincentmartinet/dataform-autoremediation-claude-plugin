@@ -43,6 +43,10 @@ case "$scope_type" in
     ;;
 esac
 
+SESSIONS_DIR="/tmp/dataform-scout-sessions"
+mkdir -p "$SESSIONS_DIR"
+touch "${SESSIONS_DIR}/${PPID}.lock"
+
 # Already running — print status and exit
 if [ -f "$PID_FILE" ]; then
   pid=$(cat "$PID_FILE")

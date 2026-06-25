@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -59,10 +60,13 @@ class ScoutDaemon:
         self.workspace_base_dir: str | None = None
         self._load_config()
         self._tail_proc: subprocess.Popen[str] | None = None
+        self._shutdown_requested = False
 
         signal.signal(signal.SIGINT, self._graceful_exit)
         signal.signal(signal.SIGTERM, self._graceful_exit)
         signal.signal(signal.SIGUSR1, self._clear_all_cache)
+
+        self._start_liveness_thread()
 
     def _clear_all_cache(self, signum: Any, frame: Any) -> None:
         logger.info("Clearing deduplication cache upon user request...")
@@ -104,8 +108,41 @@ class ScoutDaemon:
             self.workspace_base_dir = os.path.expanduser(base_dir)
             os.makedirs(self.workspace_base_dir, exist_ok=True)
 
+    def _start_liveness_thread(self) -> None:
+        def liveness_loop() -> None:
+            sessions_dir = "/tmp/dataform-scout-sessions"
+            while not self._shutdown_requested:
+                time.sleep(30)
+                if not os.path.exists(sessions_dir):
+                    continue
+                
+                active_sessions = 0
+                for filename in os.listdir(sessions_dir):
+                    if not filename.endswith(".lock"):
+                        continue
+                    pid_str = filename[:-5]
+                    if not pid_str.isdigit():
+                        continue
+                        
+                    pid = int(pid_str)
+                    try:
+                        os.kill(pid, 0)
+                        active_sessions += 1
+                    except OSError:
+                        with contextlib.suppress(OSError):
+                            os.remove(os.path.join(sessions_dir, filename))
+                
+                if active_sessions == 0:
+                    logger.info("No active Claude sessions detected. Shutting down daemon...")
+                    os.kill(os.getpid(), signal.SIGTERM)
+                    break
+
+        t = threading.Thread(target=liveness_loop, daemon=True)
+        t.start()
+
     def _graceful_exit(self, signum: Any, frame: Any) -> None:
         logger.info("Shutting down daemon...")
+        self._shutdown_requested = True
         if self._tail_proc and self._tail_proc.poll() is None:
             self._tail_proc.terminate()
         with contextlib.suppress(OSError):

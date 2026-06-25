@@ -1,7 +1,7 @@
 {
   "name": "dataform-scout",
   "description": "Monitor Google Cloud Dataform error logs and auto-fix failing .sqlx files using Claude Code.",
-  "version": "0.7.0",
+  "version": "0.9.0",
   "author": {
     "name": "martinet.v@sfeir.com"
   }

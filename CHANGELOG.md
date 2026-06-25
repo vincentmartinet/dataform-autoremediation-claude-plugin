@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.0] - 2026-06-25
+
+### Changed
+- Migrated plugin daemon lifecycle from a 1:1 session-bound process to a 1:N singleton architecture that persists across multiple Claude Code sessions.
+- `SessionStart` hook now registers its Claude Session PPID into a `.lock` file in `/tmp/dataform-scout-sessions/`.
+- `SessionEnd` hook no longer forcefully kills the python daemon. It now simply unregisters its lock file.
+- The Python daemon now runs a background thread verifying active sessions using `os.kill(pid, 0)`, cleaning up stale lock files from crashed sessions, and exiting cleanly only when 0 sessions remain.
+- ADR-0013: 1:N Plugin Lifecycle using Targeted Pidfile Liveness.
+
 ## [0.8.5] - 2026-06-25
 
 ### Added
