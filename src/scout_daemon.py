@@ -115,7 +115,7 @@ class ScoutDaemon:
                 time.sleep(30)
                 if not os.path.exists(sessions_dir):
                     continue
-                
+
                 active_sessions = 0
                 for filename in os.listdir(sessions_dir):
                     if not filename.endswith(".lock"):
@@ -123,7 +123,7 @@ class ScoutDaemon:
                     pid_str = filename[:-5]
                     if not pid_str.isdigit():
                         continue
-                        
+
                     pid = int(pid_str)
                     try:
                         os.kill(pid, 0)
@@ -131,9 +131,11 @@ class ScoutDaemon:
                     except OSError:
                         with contextlib.suppress(OSError):
                             os.remove(os.path.join(sessions_dir, filename))
-                
+
                 if active_sessions == 0:
-                    logger.info("No active Claude sessions detected. Shutting down daemon...")
+                    logger.info(
+                        "No active Claude sessions detected. Shutting down daemon..."
+                    )
                     os.kill(os.getpid(), signal.SIGTERM)
                     break
 

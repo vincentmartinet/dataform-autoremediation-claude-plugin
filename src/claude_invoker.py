@@ -5,6 +5,7 @@ import subprocess
 
 from .constants import MAX_FIX_ATTEMPTS, SKILL_PATH
 from .git_ops import GitOpsService
+from .live_test import run_live_test
 from .notifications import NotificationService
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ class ClaudeInvokerService:
         self.notification_service = notification_service
         self.git_ops = git_ops
 
-    def trigger_claude_fix(
+    def trigger_claude_fix(  # noqa: C901
         self,
         action_name: str | None,
         sqlx_path: str | None,
@@ -69,6 +70,17 @@ class ClaudeInvokerService:
                     ["dataform", "compile"], cwd=wt_path, capture_output=True, text=True
                 )
                 if compile_res.returncode == 0:
+                    logger.info("Compilation successful. Running live test...")
+                    if action_name and not run_live_test(action_name, wt_path):
+                        logger.warning(f"Live test failed on attempt {attempt}.")
+                        prompt = (
+                            "The compilation succeeded, but the live test "
+                            "(dry-run against BigQuery) failed.\n"
+                            "Please check for runtime BigQuery errors "
+                            "(like missing columns, type mismatches) and try again."
+                        )
+                        continue
+
                     logger.info(f"Fix successful on attempt {attempt}.")
                     self.notification_service.notify(
                         "Dataform Scout",

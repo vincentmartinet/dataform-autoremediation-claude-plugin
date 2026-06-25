@@ -55,6 +55,7 @@ For each error detected, the plugin will:
 - Fetch the Git remote URL and failing workspace branch directly from the Dataform API.
 - Clone the repository to a unique, automatically garbage-collected temporary subfolder (either in `/tmp` or within your configured `workspace_base_dir`) and create a new branch `fix/dataform-<timestamp>`.
 - Invoke the `fix-dataform` skill headlessly to read, patch, and verify the failing `.sqlx` file.
+- Perform a "live test" dry-run validation directly against BigQuery in a temporary dataset to catch runtime schema issues.
 - Attempt to fix the compilation error up to 3 times (anti-loop circuit breaker).
 - Notify you natively via macOS notifications when an error is caught and when a fix succeeds or fails.
 

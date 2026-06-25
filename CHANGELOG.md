@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0] - 2026-06-25
+
+### Added
+- Implemented "live test" validation against BigQuery. After a successful `dataform compile`, the daemon creates a temporary dataset, replicates the direct dependencies (schemas), and runs `dataform run --dry-run` to ensure runtime queries (like missing columns or types) are valid.
+- Added `live_test.py` leveraging the `bq` CLI and `dataform` CLI without requiring new Python dependencies.
+- ADR-0014: Live Test Validation.
+
 ## [0.9.0] - 2026-06-25
 
 ### Changed
