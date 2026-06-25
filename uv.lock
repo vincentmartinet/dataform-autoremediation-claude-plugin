@@ -165,7 +165,7 @@ toml = [
 
 [[package]]
 name = "dataform-scout"
-version = "0.7.0"
+version = "0.8.3"
 source = { virtual = "." }
 
 [package.dev-dependencies]

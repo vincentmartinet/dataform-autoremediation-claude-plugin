@@ -11,6 +11,17 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/src/hooks/session-end.sh\"",
+            "label": ""
+          }
+        ]
+      }
     ]
   }
 }

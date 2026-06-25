@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.4] - 2026-06-25
+
+### Added
+- `SessionEnd` hook and `src/hooks/session-end.sh` script to automatically stop the daemon and free resources when a Claude Code session ends.
+- ADR-0011: Stop Daemon on Session End.
+
 ## [0.8.3] - 2026-06-24
 
 ### Fixed
