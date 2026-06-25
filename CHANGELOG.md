@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.5] - 2026-06-25
+
+### Added
+- Added `workspace_base_dir` to the daemon configuration. When configured, the daemon will use `tempfile` to create isolated ephemeral subdirectories inside the configured base directory for the `git clone` workspace, rather than defaulting to the OS-managed `/tmp` directory. This allows the Git clones to correctly inherit Git configuration (like SSH keys, email, or GPG keys) that the user may have configured via `includeIf "gitdir:..."`.
+- ADR-0012: Documented the decision to use a configurable workspace root for Git `includeIf` inheritance.
+
+### Changed
+- Shifted workspace garbage collection into the daemon lifecycle. By leveraging Python's `tempfile.TemporaryDirectory` context manager, the ephemeral clone directory is guaranteed to be deleted when the fix process finishes or crashes, rather than relying on OS-level `/tmp` directory garbage collection.
+
 ## [0.8.4] - 2026-06-25
 
 ### Added

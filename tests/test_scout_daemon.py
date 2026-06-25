@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 from src.models import LogEntry
 from src.scout_daemon import ScoutDaemon
@@ -34,7 +34,7 @@ def test_extract_error_details() -> None:
 def test_handle_entry_fixable_error() -> None:
     daemon = get_mocked_daemon()
     daemon.gcp_client.get_gcp_repo_url.return_value = "https://fake.repo.url"
-    daemon.git_ops.clone_and_checkout.return_value = ("fix/branch", "/tmp/path")
+    daemon.git_ops.clone_and_checkout.return_value = "fix/branch"
     # For a fixable error, detect_error_code could return "syntaxError"
     # and classify_error returns "FIXABLE_LLM"
     daemon.error_classifier.detect_error_code.return_value = "syntaxError"
@@ -55,10 +55,10 @@ def test_handle_entry_fixable_error() -> None:
         "test-proj", "eu", "test_repo"
     )
     daemon.git_ops.clone_and_checkout.assert_called_once_with(
-        "https://fake.repo.url", ""
+        "https://fake.repo.url", "", ANY
     )
     daemon.invoker.trigger_claude_fix.assert_called_once_with(
-        "test_action", None, "syntax error", "fix/branch", "/tmp/path"
+        "test_action", None, "syntax error", "fix/branch", ANY
     )
 
 

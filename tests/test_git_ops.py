@@ -14,10 +14,9 @@ def test_clone_and_checkout_success(mock_run: MagicMock) -> None:
     mock_run.return_value.returncode = 0
 
     git_ops = GitOpsService()
-    fix_branch, clone_path = git_ops.clone_and_checkout("https://fake.url", "main")
+    fix_branch = git_ops.clone_and_checkout("https://fake.url", "main", "/tmp/test")
 
     assert fix_branch.startswith("fix/dataform-")
-    assert "/tmp/dataform-scout-" in clone_path
 
     # Verify subprocess calls
     assert mock_run.call_count == 5
@@ -54,7 +53,7 @@ def test_clone_and_checkout_dirty_dir(mock_run: MagicMock) -> None:
 
     git_ops = GitOpsService()
     with pytest.raises(GitOpsError) as exc_info:
-        git_ops.clone_and_checkout("https://fake.url", None)
+        git_ops.clone_and_checkout("https://fake.url", None, "/tmp/test")
 
     assert "is dirty" in str(exc_info.value)
 
@@ -67,6 +66,6 @@ def test_clone_and_checkout_clone_failure(mock_run: MagicMock) -> None:
 
     git_ops = GitOpsService()
     with pytest.raises(GitOpsError) as exc_info:
-        git_ops.clone_and_checkout("https://fake.url", None)
+        git_ops.clone_and_checkout("https://fake.url", None, "/tmp/test")
 
     assert "Clone failed" in str(exc_info.value)

@@ -1,7 +1,6 @@
 """Git operations module."""
 
 import logging
-import os
 import subprocess
 from datetime import datetime
 
@@ -26,10 +25,11 @@ class GitOpsService:
         except subprocess.CalledProcessError as exc:
             logger.warning(f"Failed to retrieve git config: {exc.stderr}")
 
-    def clone_and_checkout(self, repo_url: str, branch: str | None) -> tuple[str, str]:
+    def clone_and_checkout(
+        self, repo_url: str, branch: str | None, clone_path: str
+    ) -> str:
         """Clone a Git repository and checkout a specific branch."""
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        clone_path = os.path.realpath(f"/tmp/dataform-scout-{ts}")
         fix_branch = f"fix/dataform-{ts}"
 
         logger.info(f"Cloning {repo_url} into {clone_path}")
@@ -97,7 +97,7 @@ class GitOpsService:
             logger.error(f"Failed to create fix branch: {exc.stderr}")
             raise GitOpsError(f"Branch creation failed: {exc.stderr}") from exc
 
-        return fix_branch, clone_path
+        return fix_branch
 
     def push_and_create_pr(
         self, branch: str, wt_path: str, title: str, body: str

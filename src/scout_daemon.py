@@ -14,6 +14,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -54,7 +55,9 @@ class ScoutDaemon:
         self.error_classifier = error_classifier
 
         self._recent_failures: dict[str, datetime] = {}
-        self.scope_flags = self._load_scope_flags()
+        self.scope_flags: list[str] = []
+        self.workspace_base_dir: str | None = None
+        self._load_config()
         self._tail_proc: subprocess.Popen[str] | None = None
 
         signal.signal(signal.SIGINT, self._graceful_exit)
@@ -73,9 +76,9 @@ class ScoutDaemon:
             if (now - v).total_seconds() < 300
         }
 
-    def _load_scope_flags(self) -> list[str]:
+    def _load_config(self) -> None:
         if not os.path.exists(CONFIG_FILE):
-            return []
+            return
         cfg: dict[str, str] = {}
         with open(CONFIG_FILE) as f:
             for line in f:
@@ -83,17 +86,23 @@ class ScoutDaemon:
                 if "=" in line:
                     k, _, v = line.partition("=")
                     cfg[k.strip()] = v.strip()
+
         scope_type = cfg.get("scope_type", "")
         scope_id = cfg.get("scope_id", "")
-        if not scope_type or not scope_id:
-            return []
-        flag_map = {
-            "project": "--project",
-            "folder": "--folder",
-            "organization": "--organization",
-        }
-        flag = flag_map.get(scope_type)
-        return [flag, scope_id] if flag else []
+        if scope_type and scope_id:
+            flag_map = {
+                "project": "--project",
+                "folder": "--folder",
+                "organization": "--organization",
+            }
+            flag = flag_map.get(scope_type)
+            if flag:
+                self.scope_flags = [flag, scope_id]
+
+        base_dir = cfg.get("workspace_base_dir", "")
+        if base_dir:
+            self.workspace_base_dir = os.path.expanduser(base_dir)
+            os.makedirs(self.workspace_base_dir, exist_ok=True)
 
     def _graceful_exit(self, signum: Any, frame: Any) -> None:
         logger.info("Shutting down daemon...")
@@ -171,11 +180,14 @@ class ScoutDaemon:
             subtitle="Cloning repository for fix…",
         )
         try:
-            fix_branch, clone_path = self.git_ops.clone_and_checkout(repo_url, branch)
-            logger.info(f"Cloned to {clone_path} on branch {fix_branch}")
-            self.invoker.trigger_claude_fix(
-                action_name, sqlx_path, error_msg, fix_branch, clone_path
-            )
+            with tempfile.TemporaryDirectory(dir=self.workspace_base_dir) as clone_path:
+                fix_branch = self.git_ops.clone_and_checkout(
+                    repo_url, branch, clone_path
+                )
+                logger.info(f"Cloned to {clone_path} on branch {fix_branch}")
+                self.invoker.trigger_claude_fix(
+                    action_name, sqlx_path, error_msg, fix_branch, clone_path
+                )
         except GitOpsError as exc:
             logger.error(f"Git operation failed: {exc}")
 

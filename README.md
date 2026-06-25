@@ -44,6 +44,8 @@ Before the daemon can watch logs, configure which GCP resource to monitor:
 
 This will ask for a project ID, folder ID, or organization ID and write the config to `~/.config/dataform-scout/config`.
 
+You can also manually edit this config file to add `workspace_base_dir=/path/to/base/dir`. Setting this to a directory inside your normal working directory structure (like `~/work/company/.scout/`) allows Git to correctly apply any `includeIf` directives you use for multiple Git profiles, ensuring the daemon commits with the correct author and keys.
+
 ## Usage
 
 The scout daemon starts **automatically** when Claude Code launches (via the `SessionStart` hook), as long as a config exists. No manual command needed.
@@ -51,12 +53,12 @@ The scout daemon starts **automatically** when Claude Code launches (via the `Se
 For each error detected, the plugin will:
 - Deduplicate identical errors within a 5-minute rolling window.
 - Fetch the Git remote URL and failing workspace branch directly from the Dataform API.
-- Clone the repository to `/tmp/dataform-scout-<timestamp>` and create a new branch `fix/dataform-<timestamp>`.
+- Clone the repository to a unique, automatically garbage-collected temporary subfolder (either in `/tmp` or within your configured `workspace_base_dir`) and create a new branch `fix/dataform-<timestamp>`.
 - Invoke the `fix-dataform` skill headlessly to read, patch, and verify the failing `.sqlx` file.
 - Attempt to fix the compilation error up to 3 times (anti-loop circuit breaker).
 - Notify you natively via macOS notifications when an error is caught and when a fix succeeds or fails.
 
-The plugin operates fully isolated in `/tmp` and **never** pushes to any remote.
+The plugin operates fully isolated in an ephemeral temporary directory and **never** pushes to any remote automatically (unless you approve an interactive PR dialog).
 
 ## Verifying authentication
 
