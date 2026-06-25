@@ -3,7 +3,7 @@
 ## [0.8.4] - 2026-06-25
 
 ### Added
-- `docs/specifications.md` containing the high-level overview, triggers, error handling workflow, and current challenges of the plugin.
+- `docs/specifications.md` containing the high-level overview, triggers, error handling workflow, and current challenges of the plugin. Added explicit `Configuration` section.
 - `SessionEnd` hook and `src/hooks/session-end.sh` script to automatically stop the daemon and free resources when a Claude Code session ends.
 - ADR-0011: Stop Daemon on Session End.
 

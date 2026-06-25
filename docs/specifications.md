@@ -11,6 +11,24 @@ The scout daemon is triggered **automatically** when a Claude Code session launc
 - Once configured, it runs `gcloud beta logging tail` to stream real-time logs matching Dataform repository errors.
 - It also runs a 24-hour lookback upon startup to catch any recent errors that might have occurred while the daemon was offline.
 
+## Configuration
+Dataform Scout requires an initial configuration step before the daemon can start monitoring logs. 
+This is achieved by running the interactive slash command:
+`/dataform-scout:scout-configure`
+
+This wizard writes the configuration to `~/.config/dataform-scout/config`.
+
+### Current Configuration Items
+Currently, the configuration primarily supports defining the **GCP Scope** used for the `gcloud` logging tail process. The `scope_type` and `scope_id` map directly to `gcloud` flags:
+- `project` (adds `--project <id>`)
+- `folder` (adds `--folder <id>`)
+- `organization` (adds `--organization <id>`)
+
+*Note: The scout daemon will default to the active `gcloud config get-value project` if no explicit config is found, though the UI will prompt the user to configure it on the first launch.*
+
+### Manual Actions
+The in-memory deduplication cache can be manually cleared by users without restarting the daemon. Executing the clear cache routine sends a `SIGUSR1` signal to the background daemon, immediately resetting its 5-minute rolling memory of skipped errors.
+
 ## Error Handling Workflow
 When an error log is received from the real-time stream or the lookback, the daemon executes the following steps:
 
